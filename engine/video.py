@@ -195,15 +195,18 @@ class VideoAssembler:
             raw_concat = self.workspace / f"short_{i:02d}_raw.mp4"
             self.concatenate_segments(run_clips, raw_concat)
 
-            caption = (
-                segments[start]["text"].upper().replace("\\", "").replace("'", r"\'").replace(":", r"\:")
-            )
-            # Escape the colon in Windows font path for ffmpeg filter syntax
+            caption = segments[start]["text"].upper()
+            caption_path = self.workspace / f"short_{i:02d}_caption.txt"
+            caption_path.write_text(caption, encoding="utf-8")
+
+            # Escape the colon in Windows font/text-file paths for ffmpeg filter syntax,
+            # and use forward slashes so the path itself doesn't confuse the filter parser.
             escaped_font_path = font_path.replace(":", r"\:")
+            escaped_caption_path = caption_path.as_posix().replace(":", r"\:")
             vf = (
                 "scale=1080:1920:force_original_aspect_ratio=increase,"
                 "crop=1080:1920,"
-                f"drawtext=fontfile='{escaped_font_path}':text='{caption}':fontcolor=white:"
+                f"drawtext=fontfile='{escaped_font_path}':textfile='{escaped_caption_path}':fontcolor=white:"
                 "fontsize=64:borderw=4:bordercolor=black:x=(w-text_w)/2:y=120:"
                 "line_spacing=10:box=0"
             )

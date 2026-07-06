@@ -120,3 +120,39 @@ def test_extract_shorts_produces_vertical_clips_with_captions(tmp_path, fixture_
     for short_path in shorts:
         assert short_path.exists()
         assert probe_video_resolution(short_path) == (1080, 1920)
+
+
+def test_extract_shorts_preserves_apostrophes_and_percent_signs(tmp_path, fixture_image, fixture_audio):
+    """Regression test: apostrophes and '%' must survive into the burned-in caption.
+
+    The old implementation escaped apostrophes with a backslash inside a
+    single-quoted drawtext text='...' value, which ffmpeg's drawtext parser
+    interprets as *removing* the apostrophe rather than escaping it. It also
+    passed raw '%' straight into the filter string, which ffmpeg's strftime-style
+    expansion treats as a "stray %" and silently blanks the entire caption.
+    Both are silent failures (exit code 0) with no caption text rendered.
+
+    The fix writes the caption to a textfile= instead of embedding it directly,
+    sidestepping both issues entirely.
+    """
+    assembler = VideoAssembler(workspace=tmp_path, assets_dir=tmp_path / "assets")
+
+    caption_text = "It's 50% off: don't wait!"
+    segments = [
+        {"text": caption_text, "is_short_candidate": True},
+    ]
+    clips = [
+        assembler.create_segment_video(fixture_image, fixture_audio, tmp_path / "clip_00.mp4", 1.0),
+    ]
+
+    output_dir = tmp_path / "shorts"
+    shorts = assembler.extract_shorts(clips, segments, output_dir)
+
+    assert len(shorts) == 1
+    short_path = shorts[0]
+    assert short_path.exists()
+    assert probe_video_resolution(short_path) == (1080, 1920)
+
+    caption_file = tmp_path / "short_00_caption.txt"
+    assert caption_file.exists()
+    assert caption_file.read_text(encoding="utf-8") == caption_text.upper()
