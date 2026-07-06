@@ -157,3 +157,68 @@ class VideoAssembler:
         size_mb = output_path.stat().st_size / 1_000_000
         logger.info("Final render: %s (%.1f MB)", output_path.name, size_mb)
         return output_path
+
+    @staticmethod
+    def _find_candidate_runs(segments: List[dict]) -> List[Tuple[int, int]]:
+        """Return (start_idx, end_idx) inclusive ranges of contiguous is_short_candidate segments."""
+        runs: List[Tuple[int, int]] = []
+        start: Optional[int] = None
+        for i, seg in enumerate(segments):
+            if seg.get("is_short_candidate"):
+                if start is None:
+                    start = i
+            elif start is not None:
+                runs.append((start, i - 1))
+                start = None
+        if start is not None:
+            runs.append((start, len(segments) - 1))
+        return runs
+
+    def extract_shorts(
+        self,
+        segment_clips: List[Path],
+        segments: List[dict],
+        output_dir: Path,
+        font_path: str = "C:/Windows/Fonts/arialbd.ttf",
+    ) -> List[Path]:
+        """
+        Group contiguous is_short_candidate segments into standalone 1080x1920
+        Shorts, with a burned-in ALL-CAPS caption from each run's first segment.
+        No new TTS/image generation — these are cut from already-rendered clips.
+        """
+        runs = self._find_candidate_runs(segments)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        shorts: List[Path] = []
+
+        for i, (start, end) in enumerate(runs):
+            run_clips = segment_clips[start:end + 1]
+            raw_concat = self.workspace / f"short_{i:02d}_raw.mp4"
+            self.concatenate_segments(run_clips, raw_concat)
+
+            caption = (
+                segments[start]["text"].upper().replace("\\", "").replace("'", r"\'").replace(":", r"\:")
+            )
+            # Escape the colon in Windows font path for ffmpeg filter syntax
+            escaped_font_path = font_path.replace(":", r"\:")
+            vf = (
+                "scale=1080:1920:force_original_aspect_ratio=increase,"
+                "crop=1080:1920,"
+                f"drawtext=fontfile='{escaped_font_path}':text='{caption}':fontcolor=white:"
+                "fontsize=64:borderw=4:bordercolor=black:x=(w-text_w)/2:y=120:"
+                "line_spacing=10:box=0"
+            )
+            out = output_dir / f"short_{i:02d}.mp4"
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", str(raw_concat),
+                "-vf", vf,
+                "-c:v", "libx264", "-crf", "18", "-preset", "medium",
+                "-c:a", "aac", "-b:a", "192k",
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
+                str(out),
+            ]
+            _run(cmd, f"short:{out.name}")
+            shorts.append(out)
+
+        return shorts

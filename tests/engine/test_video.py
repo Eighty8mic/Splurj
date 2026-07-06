@@ -77,3 +77,46 @@ def test_finalize_produces_exact_16x9_canvas(tmp_path, fixture_image, fixture_au
 
     assert result == out
     assert probe_video_resolution(out) == (1920, 1080)
+
+
+def test_find_candidate_runs_groups_contiguous_true_segments():
+    segments = [
+        {"is_short_candidate": True},
+        {"is_short_candidate": True},
+        {"is_short_candidate": False},
+        {"is_short_candidate": False},
+        {"is_short_candidate": True},
+        {"is_short_candidate": True},
+        {"is_short_candidate": True},
+    ]
+    runs = VideoAssembler._find_candidate_runs(segments)
+    assert runs == [(0, 1), (4, 6)]
+
+
+def test_find_candidate_runs_returns_empty_when_none_marked():
+    segments = [{"is_short_candidate": False}, {"is_short_candidate": False}]
+    assert VideoAssembler._find_candidate_runs(segments) == []
+
+
+def test_extract_shorts_produces_vertical_clips_with_captions(tmp_path, fixture_image, fixture_audio):
+    assembler = VideoAssembler(workspace=tmp_path, assets_dir=tmp_path / "assets")
+
+    segments = [
+        {"text": "You tapped a card and felt nothing.", "is_short_candidate": True},
+        {"text": "That silence was the whole point.", "is_short_candidate": True},
+        {"text": "Here is the science behind it.", "is_short_candidate": False},
+        {"text": "The twist nobody expects.", "is_short_candidate": True},
+        {"text": "It changes how you'll spend this week.", "is_short_candidate": True},
+    ]
+    clips = [
+        assembler.create_segment_video(fixture_image, fixture_audio, tmp_path / f"clip_{i:02d}.mp4", 1.0)
+        for i in range(len(segments))
+    ]
+
+    output_dir = tmp_path / "shorts"
+    shorts = assembler.extract_shorts(clips, segments, output_dir)
+
+    assert len(shorts) == 2
+    for short_path in shorts:
+        assert short_path.exists()
+        assert probe_video_resolution(short_path) == (1080, 1920)
