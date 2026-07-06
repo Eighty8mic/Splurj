@@ -30,6 +30,32 @@ TOKEN_CACHE = Path.home() / ".splurj" / "yt_token.pickle"
 DEFAULT_CATEGORY = "27"  # Education
 
 
+def _truncate_tags(tags: List[str], max_chars: int = 500) -> List[str]:
+    """Keep tags in order until adding the next one would exceed max_chars.
+
+    YouTube's tag limit is 500 total characters across all tags, not 500
+    tags. Each tag after the first also costs a separator character, so we
+    budget +1 per tag beyond the first.
+    """
+    result: List[str] = []
+    total = 0
+
+    for tag in tags:
+        cost = len(tag) + (1 if result else 0)
+        if total + cost > max_chars:
+            break
+        total += cost
+        result.append(tag)
+
+    if len(result) < len(tags):
+        logger.debug(
+            "Truncated tags to fit %d-char budget: kept %d of %d.",
+            max_chars, len(result), len(tags),
+        )
+
+    return result
+
+
 class YouTubeUploader:
     def __init__(self, client_secret_file: str, privacy_status: str = "private"):
         self.client_secret_file = client_secret_file
@@ -74,7 +100,7 @@ class YouTubeUploader:
             "snippet": {
                 "title": title[:100],
                 "description": description[:5000],
-                "tags": tags[:500],
+                "tags": _truncate_tags(tags),
                 "categoryId": category_id,
                 "defaultLanguage": "en",
             },

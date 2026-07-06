@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from googleapiclient.errors import HttpError
 
-from engine.youtube import DEFAULT_CATEGORY, YouTubeUploader
+from engine.youtube import DEFAULT_CATEGORY, YouTubeUploader, _truncate_tags
 
 
 def _make_uploader(tmp_path):
@@ -70,3 +70,38 @@ def test_set_default_thumbnail_calls_thumbnails_set(tmp_path):
     _, call_kwargs = uploader.youtube.thumbnails.return_value.set.call_args
     assert call_kwargs["videoId"] == "vid123"
     fake_set.execute.assert_called_once()
+
+
+def test_update_privacy_calls_update_with_status(tmp_path):
+    uploader = _make_uploader(tmp_path)
+    fake_update = MagicMock()
+    uploader.youtube.videos.return_value.update.return_value = fake_update
+
+    uploader.update_privacy("vid123", "public")
+
+    _, call_kwargs = uploader.youtube.videos.return_value.update.call_args
+    assert call_kwargs["part"] == "status"
+    assert call_kwargs["body"] == {
+        "id": "vid123",
+        "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False},
+    }
+    fake_update.execute.assert_called_once()
+
+
+def test_truncate_tags_by_char_budget():
+    tags = ["a" * 60 for _ in range(10)]
+
+    result = _truncate_tags(tags, max_chars=500)
+
+    # 8 tags of 60 chars + 7 separators (1 per tag after the first) = 487 <= 500
+    # A 9th tag would push it to 548 > 500, so it must be dropped.
+    assert len(result) == 8
+    assert result == tags[:8]
+
+
+def test_truncate_tags_short_list_unchanged():
+    tags = ["money psychology", "splurj"]
+
+    result = _truncate_tags(tags, max_chars=500)
+
+    assert result == tags
