@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -156,3 +157,36 @@ def test_extract_shorts_preserves_apostrophes_and_percent_signs(tmp_path, fixtur
     caption_file = tmp_path / "short_00_caption.txt"
     assert caption_file.exists()
     assert caption_file.read_text(encoding="utf-8") == caption_text.upper()
+
+    # Real-render assertion: the textfile content above is the INPUT to ffmpeg's
+    # drawtext filter, not proof anything was actually drawn. drawtext's
+    # `expansion` option defaults to "normal", which applies strftime/expansion
+    # syntax to textfile= content too — a bare '%' in the caption ("50%") then
+    # triggers a "Stray %" warning and ffmpeg silently draws zero pixels while
+    # still exiting 0. Extract a raw grayscale frame from the caption band and
+    # confirm bright (white-text) pixels actually landed on screen, since the
+    # fixture frame is a flat blue field with no bright content of its own.
+    frame_path = tmp_path / "short_00_frame.raw"
+    crop_w, crop_h = 1080, 300
+    extract_cmd = [
+        "ffmpeg", "-y",
+        "-i", str(short_path),
+        "-frames:v", "1",
+        "-vf", f"crop={crop_w}:{crop_h}:0:0,format=gray",
+        "-f", "rawvideo",
+        "-pix_fmt", "gray",
+        str(frame_path),
+    ]
+    result = subprocess.run(extract_cmd, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+    frame_bytes = frame_path.read_bytes()
+    assert len(frame_bytes) == crop_w * crop_h
+
+    BRIGHT_THRESHOLD = 200
+    bright_pixel_count = sum(1 for b in frame_bytes if b > BRIGHT_THRESHOLD)
+    assert bright_pixel_count > 0, (
+        "Expected bright white-caption-text pixels in the caption band but found "
+        "none — the '%' in the caption likely triggered ffmpeg drawtext's "
+        "'Stray %' silent-blank-render bug (expansion=normal by default)."
+    )

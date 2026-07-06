@@ -208,7 +208,7 @@ class VideoAssembler:
                 "crop=1080:1920,"
                 f"drawtext=fontfile='{escaped_font_path}':textfile='{escaped_caption_path}':fontcolor=white:"
                 "fontsize=64:borderw=4:bordercolor=black:x=(w-text_w)/2:y=120:"
-                "line_spacing=10:box=0"
+                "line_spacing=10:box=0:expansion=none"
             )
             out = output_dir / f"short_{i:02d}.mp4"
             cmd = [
