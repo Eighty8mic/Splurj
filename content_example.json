@@ -1,0 +1,51 @@
+{
+  "day": 1,
+  "format": "long",
+  "metadata": {
+    "title": "Why Your Brain Feels No Pain When You Tap a Card",
+    "description": "You tap a card every day without a second thought. Here's the real reason that silence at checkout isn't an accident.",
+    "tags": ["money psychology", "behavioral finance", "splurj", "pain of paying"]
+  },
+  "voiceover": {
+    "directive": "Calm, curious, a little conspiratorial. Unhurried.",
+    "full_text": "This morning, you tapped a small piece of plastic against a machine. Money left your account. You felt nothing at all. Economists call that missing flicker the pain of paying. Your brain evolved to feel a small sting every time you spend. A tap removes that sting on purpose, not by accident. That silence at checkout is proof the system worked exactly as intended."
+  },
+  "timeline": [
+    {
+      "start": 0, "end": 15,
+      "text": "This morning, you tapped a small piece of plastic against a machine.",
+      "prompt": "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, a stick figure with a big circular head and dot eyes tapping a credit card against a card reader on a plain white counter, neutral expression, background is flat white, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+      "is_short_candidate": true
+    },
+    {
+      "start": 15, "end": 30,
+      "text": "Money left your account. You felt nothing at all.",
+      "prompt": "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same stick figure standing calmly with a thought bubble showing a small dollar bill with a face flying away, flat white background, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+      "is_short_candidate": true
+    },
+    {
+      "start": 30, "end": 45,
+      "text": "Economists call that missing flicker the pain of paying.",
+      "prompt": "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, a large brain with dollar-sign eyes centered on a solid blue background with bold ALL CAPS yellow text reading PAIN OF PAYING above it, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+      "is_short_candidate": false
+    },
+    {
+      "start": 45, "end": 60,
+      "text": "Your brain evolved to feel a small sting every time you spend.",
+      "prompt": "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, a caveman-styled simple stick figure handing over coins with a wincing expression, tan background suggesting history, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+      "is_short_candidate": false
+    },
+    {
+      "start": 60, "end": 75,
+      "text": "A tap removes that sting on purpose, not by accident.",
+      "prompt": "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, a credit card drawn with a sly grinning face next to a card reader, red ALL CAPS text reading BY DESIGN above it, flat orange background, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+      "is_short_candidate": true
+    },
+    {
+      "start": 75, "end": 90,
+      "text": "That silence at checkout is proof the system worked exactly as intended.",
+      "prompt": "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same original stick figure walking away calmly from the counter, flat white background, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+      "is_short_candidate": true
+    }
+  ]
+}
