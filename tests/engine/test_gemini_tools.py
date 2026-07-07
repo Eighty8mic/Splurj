@@ -1,3 +1,4 @@
+import copy
 from unittest.mock import MagicMock, patch
 
 from engine.gemini_tools import GeminiPromptEnhancer, GeminiScriptPolisher
@@ -9,13 +10,13 @@ def _fake_text_response(text: str) -> MagicMock:
 
 def test_polish_segment_returns_polished_text_on_success():
     with patch("google.genai.Client") as mock_client_cls:
-        mock_client_cls.return_value.models.generate_content.return_value = _fake_text_response(
-            "You tapped your card this morning. You felt nothing at all."
-        )
+        original = "You know that feeling when you tap a card and nothing happens? Your brain doesn't register the payment. That's the dopamine gap—the disconnect between the action and the emotional impact."
+        polished = "When you tap a card, does your brain register the action? Most people don't feel the payment anymore. That gap—between the tap and the emotion—that's where psychology and money collide."
+        mock_client_cls.return_value.models.generate_content.return_value = _fake_text_response(polished)
         polisher = GeminiScriptPolisher(api_key="key")
-        result = polisher.polish_segment("You tapped your card. You felt nothing.", directive="calm")
+        result = polisher.polish_segment(original, directive="calm")
 
-    assert result == "You tapped your card this morning. You felt nothing at all."
+    assert result == polished
 
 
 def test_polish_segment_falls_back_to_original_on_api_error():
@@ -58,6 +59,24 @@ def test_polish_blueprint_rebuilds_full_text_from_polished_segments():
     assert result["timeline"][1]["text"] == "Second segment polished."
     assert result["voiceover"]["full_text"] == "First segment polished. Second segment polished."
     assert result["timeline"][0]["prompt"] == "p1"  # untouched by the script polisher
+
+
+def test_polish_blueprint_does_not_mutate_input():
+    blueprint = {
+        "voiceover": {"directive": "calm", "full_text": "old text"},
+        "timeline": [
+            {"start": 0, "end": 15, "text": "First segment.", "prompt": "p1", "is_short_candidate": False},
+        ],
+    }
+    blueprint_copy = copy.deepcopy(blueprint)
+
+    with patch("google.genai.Client") as mock_client_cls:
+        mock_client_cls.return_value.models.generate_content.return_value = _fake_text_response("First segment polished.")
+        polisher = GeminiScriptPolisher(api_key="key")
+        result = polisher.polish_blueprint(blueprint)
+
+    assert blueprint == blueprint_copy
+    assert result["timeline"][0] is not blueprint["timeline"][0]
 
 
 def test_enhance_prompt_returns_enhanced_text_on_success():

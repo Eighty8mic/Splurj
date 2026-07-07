@@ -62,7 +62,7 @@ class GeminiScriptPolisher:
 
         orig_wc = len(text.split())
         result_wc = len(result.split())
-        if not (orig_wc * 0.5 <= result_wc <= orig_wc * 2.0):
+        if not (orig_wc * 0.5 <= result_wc <= orig_wc * 1.5):
             logger.warning("Polish word count drift (%d -> %d) — using original", orig_wc, result_wc)
             return text
 
