@@ -8,6 +8,7 @@ import pytest
 from splurj_engine import (
     DISCLAIMER,
     build_description,
+    build_shorts_title,
     build_thumbnail_prompts,
     load_blueprint,
     load_env,
@@ -89,6 +90,27 @@ def test_build_description_always_appends_disclaimer():
     result = build_description("A hook description with no disclaimer.", "Full script text.", day=1)
     assert DISCLAIMER in result
     assert "A hook description" in result
+
+
+def test_build_description_keeps_disclaimer_intact_for_long_scripts():
+    # Real Splurj scripts run 1,800-2,500 words (~10-15k chars). The uploader
+    # slices description[:5000] before sending to the API, so the disclaimer
+    # must survive that slice on every real-length video.
+    long_script = "Seg. " * 2000  # ~10,000 characters
+    result = build_description("A hook description.", long_script, day=1)
+
+    assert len(result) <= 5000
+    assert result.rstrip().endswith(DISCLAIMER)
+
+
+def test_build_shorts_title_keeps_hashtag_intact_after_uploader_truncation():
+    # engine/youtube.py's uploader applies title[:100] before sending to the API.
+    # The Shorts title must still end with "#Shorts" after that slice, even for
+    # an overly long blueprint title.
+    long_title = "Why Your Brain Feels No Pain When You Tap a Card " * 3  # >150 chars
+    short_title = build_shorts_title(long_title)
+
+    assert (short_title[:100]).endswith("#Shorts")
 
 
 def test_build_thumbnail_prompts_returns_two_style_locked_variants():

@@ -14,7 +14,6 @@ import logging
 import os
 import re
 import shutil
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -34,6 +33,12 @@ ASSETS_DIR = BASE_DIR / "assets"
 CHANNEL_DATA = BASE_DIR / "channel_data"
 
 DISCLAIMER = "This video is for education and entertainment only. It is not financial advice."
+
+# Safety margin under YouTube's hard 5,000-char description limit (engine/youtube.py
+# applies description[:5000] before sending to the API). Assembled descriptions are
+# capped here so the DISCLAIMER — which must appear on every uploaded video — always
+# survives that slice intact, even when the quoted script portion is very long.
+MAX_DESCRIPTION_CHARS = 4_900
 
 logging.basicConfig(
     level=logging.INFO,
@@ -115,14 +120,40 @@ def slugify(text: str) -> str:
 
 
 def build_description(meta_description: str, full_script: str, day: int) -> str:
-    return (
-        f"{meta_description}\n\n"
-        f"{'-' * 40}\n"
-        f"Episode {day}\n\n"
-        f'"{full_script}"\n\n'
-        f"{'-' * 40}\n"
-        f"{DISCLAIMER}"
-    )
+    """Assemble the YouTube description.
+
+    The DISCLAIMER must survive the uploader's description[:5000] slice on every
+    upload, but real Splurj scripts can be 10k+ characters. So the whole assembled
+    description is capped at MAX_DESCRIPTION_CHARS, and if it would exceed that cap,
+    only the quoted script portion is truncated (with a trailing "…") — the
+    disclaimer itself is never modified or truncated and always stays last.
+    """
+    separator = "-" * 40
+    header = f"{meta_description}\n\n{separator}\nEpisode {day}\n\n"
+    footer = f"\n\n{separator}\n{DISCLAIMER}"
+
+    # Budget derived from the actual assembled fixed parts (header + quote marks +
+    # separators + disclaimer), not a hardcoded offset.
+    fixed_len = len(header) + len('""') + len(footer)
+    available_for_script = max(MAX_DESCRIPTION_CHARS - fixed_len, 0)
+
+    script = full_script
+    if len(script) > available_for_script:
+        ellipsis = "…"
+        keep = max(available_for_script - len(ellipsis), 0)
+        script = script[:keep] + ellipsis
+
+    return f'{header}"{script}"{footer}'
+
+
+def build_shorts_title(title: str) -> str:
+    """Build the title used for Shorts uploads.
+
+    The uploader slices title[:100] before sending to the API. Base is capped at
+    92 chars so base + " #Shorts" (8 chars) is at most 100 — keeping the hashtag
+    intact instead of getting chopped mid-word.
+    """
+    return title[:92] + " #Shorts"
 
 
 def build_thumbnail_prompts(title: str) -> List[str]:
@@ -284,7 +315,7 @@ def run_pipeline(
             short_description = build_description(f"{meta['description']} #Shorts", full_script, day)
             short_response = uploader.upload(
                 video_path=short_path,
-                title=title[:95] + " #Shorts",
+                title=build_shorts_title(title),
                 description=short_description,
                 tags=meta.get("tags", []),
             )
