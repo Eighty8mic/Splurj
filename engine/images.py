@@ -10,7 +10,9 @@ calls, and is what makes "hold this scene" segments in a blueprint cheap.
 
 import hashlib
 import logging
+import os
 import shutil
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -20,8 +22,8 @@ logger = logging.getLogger(__name__)
 _CACHE_DIR = Path(__file__).parent.parent / "cache" / "images"
 
 
-def _prompt_cache_path(prompt: str, model: str) -> Path:
-    key = hashlib.md5(f"{model}:{prompt}".encode()).hexdigest()
+def _prompt_cache_path(prompt: str, model: str, ref_digest: str = "") -> Path:
+    key = hashlib.md5(f"{model}:{ref_digest}:{prompt}".encode(), usedforsecurity=False).hexdigest()
     return _CACHE_DIR / f"{key}.png"
 
 
@@ -42,8 +44,14 @@ class ImageGenerator:
     ) -> Path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
+        ref_bytes: Optional[bytes] = None
+        ref_digest = ""
+        if reference_image_path is not None:
+            ref_bytes = Path(reference_image_path).read_bytes()
+            ref_digest = hashlib.md5(ref_bytes, usedforsecurity=False).hexdigest()
+
         if self.use_cache:
-            cached = _prompt_cache_path(prompt, self.model)
+            cached = _prompt_cache_path(prompt, self.model, ref_digest)
             if cached.exists():
                 logger.info("Cache hit  -> %s  (skipping API call)", output_path.name)
                 shutil.copy2(cached, output_path)
@@ -52,19 +60,36 @@ class ImageGenerator:
         logger.info("Generating image (%s) -> %s", self.model, output_path.name)
         logger.debug("Prompt: %s", prompt[:120])
 
-        self._generate_gemini(prompt, output_path, reference_image_path, max_retries)
+        self._generate_gemini(prompt, output_path, ref_bytes, max_retries)
 
         if self.use_cache:
-            _CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(output_path, _prompt_cache_path(prompt, self.model))
+            self._write_cache(prompt, output_path, ref_digest)
 
         return output_path
+
+    def _write_cache(self, prompt: str, output_path: Path, ref_digest: str) -> None:
+        """Copy the freshly generated image into the prompt cache.
+
+        Uses a unique temp file + os.replace so that two threads generating the
+        same (prompt, reference) concurrently — e.g. under splurj_engine's
+        ThreadPoolExecutor(max_workers=3) — never observe a partially-written
+        cache file. A cache-write failure must never fail image generation
+        itself, since the caller already has a valid output_path.
+        """
+        try:
+            _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            cache_path = _prompt_cache_path(prompt, self.model, ref_digest)
+            tmp_path = cache_path.parent / f"{cache_path.name}.tmp-{os.getpid()}-{threading.get_ident()}"
+            shutil.copy2(output_path, tmp_path)
+            os.replace(tmp_path, cache_path)
+        except Exception as exc:
+            logger.warning("Failed to write prompt cache for %s: %s", output_path.name, exc)
 
     def _generate_gemini(
         self,
         prompt: str,
         output_path: Path,
-        reference_image_path: Optional[Path],
+        ref_bytes: Optional[bytes],
         max_retries: int,
     ) -> None:
         from google import genai
@@ -73,8 +98,7 @@ class ImageGenerator:
         client = genai.Client(api_key=self.api_key)
 
         contents = [prompt]
-        if reference_image_path is not None:
-            ref_bytes = Path(reference_image_path).read_bytes()
+        if ref_bytes is not None:
             contents.append(types.Part.from_bytes(data=ref_bytes, mime_type="image/png"))
 
         for attempt in range(1, max_retries + 1):
