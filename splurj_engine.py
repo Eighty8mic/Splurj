@@ -63,6 +63,14 @@ def _validate_blueprint(data: Dict[str, Any], source: str = "") -> None:
     if missing_meta:
         raise SystemExit(f"metadata block{label} missing: {missing_meta}")
 
+    description_len = len(data["metadata"]["description"])
+    if description_len > 1000:
+        raise SystemExit(
+            f"metadata.description{label} is {description_len} chars, exceeding the 1000-char "
+            "limit — a header this long can push the DISCLAIMER past YouTube's 5000-char "
+            "description slice. Shorten it."
+        )
+
     if not isinstance(data["timeline"], list) or not data["timeline"]:
         raise SystemExit(f"timeline{label} must be a non-empty list of segment objects")
 

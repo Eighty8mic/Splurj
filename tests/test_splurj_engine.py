@@ -55,6 +55,16 @@ def test_validate_blueprint_rejects_missing_segment_key():
         _validate_blueprint(bp)
 
 
+def test_validate_blueprint_rejects_oversized_metadata_description():
+    # A huge metadata.description header would push the DISCLAIMER past
+    # YouTube's 5000-char description slice (engine/youtube.py applies
+    # description[:5000]) — this must be rejected at blueprint validation time.
+    bp = _valid_blueprint()
+    bp["metadata"]["description"] = "x" * 1001
+    with pytest.raises(SystemExit, match="metadata.description"):
+        _validate_blueprint(bp)
+
+
 def test_validate_blueprint_rejects_full_text_mismatch():
     bp = _valid_blueprint()
     bp["voiceover"]["full_text"] = "This does not match the segments at all."
