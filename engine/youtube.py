@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import httplib2
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -67,8 +68,12 @@ class YouTubeUploader:
         TOKEN_CACHE.parent.mkdir(parents=True, exist_ok=True)
 
         if TOKEN_CACHE.exists():
-            with open(TOKEN_CACHE, "rb") as fh:
-                creds = pickle.load(fh)
+            try:
+                with open(TOKEN_CACHE, "rb") as fh:
+                    creds = pickle.load(fh)
+            except Exception as exc:
+                logger.warning("Token cache unreadable (%s); re-authenticating.", exc)
+                creds = None
 
         if creds and creds.expired and creds.refresh_token:
             try:
@@ -153,7 +158,7 @@ class YouTubeUploader:
                     time.sleep(wait)
                 else:
                     raise RuntimeError(f"Upload failed after {retry} retries: {exc}") from exc
-            except Exception as exc:
+            except (httplib2.HttpLib2Error, OSError) as exc:
                 if retry < max_retries:
                     retry += 1
                     wait = 2 ** retry

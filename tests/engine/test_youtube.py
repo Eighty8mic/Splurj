@@ -57,6 +57,24 @@ def test_upload_retries_on_5xx_then_succeeds(tmp_path):
     assert response["id"] == "vid456"
 
 
+def test_upload_does_not_retry_on_programming_error(tmp_path):
+    uploader = _make_uploader(tmp_path)
+    fake_request = MagicMock()
+    fake_request.next_chunk.side_effect = TypeError("boom: bad argument")
+    uploader.youtube.videos.return_value.insert.return_value = fake_request
+
+    video_path = tmp_path / "output.mp4"
+    video_path.write_bytes(b"fake-mp4-bytes")
+
+    with patch("engine.youtube.time.sleep") as mock_sleep:
+        with pytest.raises(TypeError, match="boom"):
+            uploader.upload(
+                video_path=video_path, title="t", description="d", tags=[],
+            )
+
+    mock_sleep.assert_not_called()
+
+
 def test_set_default_thumbnail_calls_thumbnails_set(tmp_path):
     uploader = _make_uploader(tmp_path)
     fake_set = MagicMock()
