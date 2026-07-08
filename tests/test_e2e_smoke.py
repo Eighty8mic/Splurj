@@ -55,6 +55,12 @@ def test_cli_main_no_upload_renders_and_cleans_workspace(tmp_path, fixture_image
     assert probe_video_resolution(output_files[0]) == (1920, 1080)
     assert not (tmp_path / "workspace" / "day_001").exists()  # cleaned up by default
 
+    # content_example.json has two contiguous is_short_candidate runs -> two Shorts.
+    shorts_dir = tmp_path / "output" / "day_001_shorts"
+    short_files = list(shorts_dir.glob("short_*.mp4"))
+    assert len(short_files) == 2
+    assert probe_video_resolution(short_files[0]) == (1080, 1920)
+
 
 def test_cli_main_keep_workspace_preserves_temp_files(tmp_path, fixture_image, fixture_audio, monkeypatch):
     _patch_dirs(monkeypatch, tmp_path)

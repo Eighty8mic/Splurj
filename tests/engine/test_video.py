@@ -134,7 +134,9 @@ def test_extract_shorts_preserves_apostrophes_and_percent_signs(tmp_path, fixtur
     Both are silent failures (exit code 0) with no caption text rendered.
 
     The fix writes the caption to a textfile= instead of embedding it directly,
-    sidestepping both issues entirely.
+    which fixes the apostrophe-escaping issue — but textfile= content still goes
+    through drawtext's expansion parser by default, so the '%' issue is fixed
+    separately by passing expansion=none.
     """
     assembler = VideoAssembler(workspace=tmp_path, assets_dir=tmp_path / "assets")
 

@@ -30,7 +30,7 @@ def test_polish_segment_falls_back_to_original_on_api_error():
 
 
 def test_polish_segment_falls_back_when_word_count_drifts_too_much():
-    original = "You tapped your card. You felt nothing. " * 5  # ~20 words
+    original = "You tapped your card. You felt nothing. " * 5  # ~35 words
     with patch("google.genai.Client") as mock_client_cls:
         mock_client_cls.return_value.models.generate_content.return_value = _fake_text_response("Short.")
         polisher = GeminiScriptPolisher(api_key="key")
