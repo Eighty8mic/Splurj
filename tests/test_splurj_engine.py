@@ -15,6 +15,7 @@ from splurj_engine import (
     load_env,
     run_pipeline,
     slugify,
+    _generate_one_segment,
     _validate_blueprint,
 )
 
@@ -53,6 +54,26 @@ def test_validate_blueprint_rejects_missing_segment_key():
     bp = _valid_blueprint()
     del bp["timeline"][0]["is_short_candidate"]
     with pytest.raises(SystemExit, match="is_short_candidate"):
+        _validate_blueprint(bp)
+
+
+def test_validate_blueprint_accepts_segment_with_sfx_cues():
+    bp = _valid_blueprint()
+    bp["timeline"][0]["sfx"] = [{"cue": "a coin drop", "at": 1.5}]
+    _validate_blueprint(bp)  # must not raise
+
+
+def test_validate_blueprint_rejects_sfx_cue_missing_at():
+    bp = _valid_blueprint()
+    bp["timeline"][0]["sfx"] = [{"cue": "a coin drop"}]
+    with pytest.raises(SystemExit, match="sfx\\[0\\]"):
+        _validate_blueprint(bp)
+
+
+def test_validate_blueprint_rejects_negative_sfx_at():
+    bp = _valid_blueprint()
+    bp["timeline"][0]["sfx"] = [{"cue": "a coin drop", "at": -1}]
+    with pytest.raises(SystemExit, match="must be a non-negative number"):
         _validate_blueprint(bp)
 
 
@@ -337,3 +358,56 @@ def test_run_pipeline_continues_without_music_if_generation_fails(tmp_path, fixt
         result = run_pipeline(_valid_blueprint(), env, skip_upload=True)  # must not raise
 
     assert result["long_form"].exists()
+
+
+def test_generate_one_segment_overlays_sfx_when_cues_present(tmp_path, fixture_image, fixture_audio):
+    fake_audio_gen = MagicMock()
+    fake_audio_gen.generate_segment.side_effect = (
+        lambda text, output_path, directive="", max_retries=4: shutil.copy2(fixture_audio, output_path) or output_path
+    )
+    fake_audio_gen.probe_duration.side_effect = lambda audio_path: 1.0
+
+    fake_image_gen = MagicMock()
+    fake_image_gen.generate.side_effect = (
+        lambda prompt, output_path, reference_image_path=None, max_retries=4: shutil.copy2(fixture_image, output_path) or output_path
+    )
+
+    fake_sfx_gen = MagicMock()
+    fake_sfx_gen.generate.side_effect = (
+        lambda text, output_path, duration_seconds=None, max_retries=4: shutil.copy2(fixture_audio, output_path) or output_path
+    )
+
+    segment = {"text": "Seg one.", "prompt": "doodle prompt", "sfx": [{"cue": "coin drop", "at": 0.2}]}
+
+    with patch("splurj_engine.overlay_cues") as mock_overlay:
+        mock_overlay.side_effect = lambda voice, cues, output_path: shutil.copy2(voice, output_path) or output_path
+        result = _generate_one_segment(
+            0, segment, "calm", fake_audio_gen, fake_image_gen, tmp_path, None, sfx_gen=fake_sfx_gen
+        )
+
+    fake_sfx_gen.generate.assert_called_once()
+    cue_args, _ = mock_overlay.call_args
+    assert cue_args[1] == [(Path(tmp_path / "sfx_00_00.mp3"), 0.2)]
+    assert result["audio"].exists()
+
+
+def test_generate_one_segment_skips_sfx_when_no_cues(tmp_path, fixture_image, fixture_audio):
+    fake_audio_gen = MagicMock()
+    fake_audio_gen.generate_segment.side_effect = (
+        lambda text, output_path, directive="", max_retries=4: shutil.copy2(fixture_audio, output_path) or output_path
+    )
+    fake_audio_gen.probe_duration.side_effect = lambda audio_path: 1.0
+
+    fake_image_gen = MagicMock()
+    fake_image_gen.generate.side_effect = (
+        lambda prompt, output_path, reference_image_path=None, max_retries=4: shutil.copy2(fixture_image, output_path) or output_path
+    )
+
+    fake_sfx_gen = MagicMock()
+    segment = {"text": "Seg one.", "prompt": "doodle prompt"}
+
+    with patch("splurj_engine.overlay_cues") as mock_overlay:
+        _generate_one_segment(0, segment, "calm", fake_audio_gen, fake_image_gen, tmp_path, None, sfx_gen=fake_sfx_gen)
+
+    fake_sfx_gen.generate.assert_not_called()
+    mock_overlay.assert_not_called()

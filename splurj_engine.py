@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 from engine.audio import AudioGenerator
 from engine.images import ImageGenerator
 from engine.music import MusicGenerator
+from engine.sfx import SoundEffectGenerator, overlay_cues
 from engine.video import VideoAssembler
 from engine.youtube import YouTubeUploader
 
@@ -83,6 +84,16 @@ def _validate_blueprint(data: Dict[str, Any], source: str = "") -> None:
         for key in ("start", "end", "text", "prompt", "is_short_candidate"):
             if key not in seg:
                 raise SystemExit(f"timeline[{i}]{label} is missing '{key}'")
+
+        if "sfx" in seg:
+            if not isinstance(seg["sfx"], list):
+                raise SystemExit(f"timeline[{i}].sfx{label} must be a list")
+            for j, cue in enumerate(seg["sfx"]):
+                for key in ("cue", "at"):
+                    if key not in cue:
+                        raise SystemExit(f"timeline[{i}].sfx[{j}]{label} is missing '{key}'")
+                if not isinstance(cue["at"], (int, float)) or cue["at"] < 0:
+                    raise SystemExit(f"timeline[{i}].sfx[{j}].at{label} must be a non-negative number")
 
     expected_full_text = " ".join(seg["text"] for seg in data["timeline"])
     if data["voiceover"].get("full_text", "").strip() != expected_full_text.strip():
@@ -196,13 +207,24 @@ def build_thumbnail_prompts(title: str) -> List[str]:
 
 # ── Asset generation ─────────────────────────────────────────────────────────
 
-def _generate_one_segment(idx, segment, directive, audio_gen, image_gen, workspace, reference_image_path):
+def _generate_one_segment(idx, segment, directive, audio_gen, image_gen, workspace, reference_image_path, sfx_gen=None):
     audio_path = workspace / f"audio_{idx:02d}.mp3"
     image_path = workspace / f"image_{idx:02d}.png"
 
     audio_gen.generate_segment(segment["text"], audio_path, directive=directive)
     duration = audio_gen.probe_duration(audio_path)
     image_gen.generate(segment["prompt"], image_path, reference_image_path=reference_image_path)
+
+    sfx_cues = segment.get("sfx")
+    if sfx_cues:
+        cue_clips = []
+        for j, cue in enumerate(sfx_cues):
+            cue_path = workspace / f"sfx_{idx:02d}_{j:02d}.mp3"
+            sfx_gen.generate(cue["cue"], cue_path)
+            cue_clips.append((cue_path, cue["at"]))
+        mixed_path = workspace / f"audio_{idx:02d}_mixed.mp3"
+        overlay_cues(audio_path, cue_clips, mixed_path)
+        os.replace(mixed_path, audio_path)
 
     return {
         "index": idx,
@@ -213,7 +235,7 @@ def _generate_one_segment(idx, segment, directive, audio_gen, image_gen, workspa
     }
 
 
-def generate_all_assets(blueprint, audio_gen, image_gen, workspace, reference_image_path, max_workers=3):
+def generate_all_assets(blueprint, audio_gen, image_gen, workspace, reference_image_path, sfx_gen=None, max_workers=3):
     timeline = blueprint["timeline"]
     directive = blueprint["voiceover"].get("directive", "")
     results = {}
@@ -221,7 +243,7 @@ def generate_all_assets(blueprint, audio_gen, image_gen, workspace, reference_im
     logger.info("Generating assets for %d segments (max %d workers)…", len(timeline), max_workers)
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
-            pool.submit(_generate_one_segment, i, seg, directive, audio_gen, image_gen, workspace, reference_image_path): i
+            pool.submit(_generate_one_segment, i, seg, directive, audio_gen, image_gen, workspace, reference_image_path, sfx_gen): i
             for i, seg in enumerate(timeline)
         }
         for future in as_completed(futures):
@@ -266,6 +288,7 @@ def run_pipeline(
         api_key=env["GEMINI_API_KEY"],
         model=os.getenv("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image"),
     )
+    sfx_gen = SoundEffectGenerator(api_key=env["ELEVENLABS_API_KEY"])
     assembler = VideoAssembler(workspace=run_ws, assets_dir=ASSETS_DIR)
 
     reference_image_path = CHANNEL_DATA / "character_reference.png"
@@ -283,7 +306,7 @@ def run_pipeline(
             blueprint = GeminiPromptEnhancer(env["GEMINI_API_KEY"]).enhance_blueprint(blueprint)
 
     t0 = time.perf_counter()
-    segments = generate_all_assets(blueprint, audio_gen, image_gen, run_ws, reference_image_path)
+    segments = generate_all_assets(blueprint, audio_gen, image_gen, run_ws, reference_image_path, sfx_gen=sfx_gen)
     logger.info("Assets ready in %.0fs", time.perf_counter() - t0)
 
     logger.info("Building segment clips…")
