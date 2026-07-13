@@ -5,6 +5,8 @@ Parses voiceover directives into voice settings and generates per-segment MP3s.
 
 import json
 import logging
+import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -13,6 +15,79 @@ from elevenlabs import ElevenLabs
 from elevenlabs.types import VoiceSettings
 
 logger = logging.getLogger(__name__)
+
+# Every segment is a separate ElevenLabs generation and generations come back
+# at wildly different levels, so each one is normalized to this EBU R128
+# integrated-loudness target before assembly.
+LOUDNESS_TARGET_I = -16.0
+LOUDNESS_TARGET_TP = -1.5
+LOUDNESS_TARGET_LRA = 11.0
+# Below this integrated loudness there is no signal worth normalizing —
+# make-up gain would only amplify the noise floor.
+SILENCE_FLOOR_LUFS = -50.0
+
+
+def _measure_loudnorm_stats(audio_path: Path) -> dict:
+    """First loudnorm pass: measure the file's loudness stats (JSON on stderr)."""
+    cmd = [
+        "ffmpeg", "-hide_banner", "-nostats", "-i", str(audio_path),
+        "-af",
+        f"loudnorm=I={LOUDNESS_TARGET_I}:TP={LOUDNESS_TARGET_TP}:"
+        f"LRA={LOUDNESS_TARGET_LRA}:print_format=json",
+        "-f", "null", "-",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"Loudness measurement failed on {audio_path.name}: {result.stderr}")
+    # The JSON block is not the last thing on stderr — muxer stats follow it —
+    # so take the last brace-delimited block anywhere in the output.
+    matches = re.findall(r"\{[^{}]*\}", result.stderr)
+    if not matches:
+        raise RuntimeError(f"No loudnorm stats in ffmpeg output for {audio_path.name}")
+    return json.loads(matches[-1])
+
+
+def measure_integrated_loudness(audio_path: Path) -> float:
+    """Integrated loudness (LUFS) of an audio file, per EBU R128."""
+    return float(_measure_loudnorm_stats(audio_path)["input_i"])
+
+
+def normalize_loudness(audio_path: Path, target_i: float = LOUDNESS_TARGET_I) -> Path:
+    """Normalize a file in place to the target integrated loudness.
+
+    Two-pass linear loudnorm: pure make-up gain, so the delivery dynamics
+    within a segment are preserved while segments land on one level.
+    Near-silent audio is returned untouched.
+    """
+    stats = _measure_loudnorm_stats(audio_path)
+    input_i = float(stats["input_i"])
+    if input_i < SILENCE_FLOOR_LUFS:
+        logger.warning(
+            "Skipping loudness normalization on near-silent audio: %s (%.1f LUFS)",
+            audio_path.name, input_i,
+        )
+        return audio_path
+
+    normalized = audio_path.with_suffix(".norm.mp3")
+    filter_arg = (
+        f"loudnorm=I={target_i}:TP={LOUDNESS_TARGET_TP}:LRA={LOUDNESS_TARGET_LRA}:"
+        f"measured_I={stats['input_i']}:measured_TP={stats['input_tp']}:"
+        f"measured_LRA={stats['input_lra']}:measured_thresh={stats['input_thresh']}:"
+        f"offset={stats['target_offset']}:linear=true"
+    )
+    cmd = [
+        "ffmpeg", "-y", "-hide_banner", "-nostats", "-i", str(audio_path),
+        "-af", filter_arg,
+        # loudnorm resamples to 192 kHz internally; restore the source rate.
+        "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "192k",
+        str(normalized),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"Loudness normalization failed on {audio_path.name}: {result.stderr}")
+    os.replace(normalized, audio_path)
+    logger.debug("Normalized %s: %.1f -> %.1f LUFS", audio_path.name, input_i, target_i)
+    return audio_path
 
 
 def parse_directive(directive: str) -> VoiceSettings:
@@ -104,6 +179,7 @@ class AudioGenerator:
         if not output_path.exists() or output_path.stat().st_size < 100:
             raise RuntimeError(f"Audio file too small or missing: {output_path}")
 
+        normalize_loudness(output_path)
         logger.info("Audio saved: %s (%.1f KB)", output_path.name, output_path.stat().st_size / 1024)
         return output_path
 
