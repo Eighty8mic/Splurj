@@ -233,3 +233,24 @@ def test_extract_shorts_writes_wrapped_caption_textfile(tmp_path, fixture_image,
     assert len(caption_lines) > 1
     assert all(len(line) <= CAPTION_MAX_CHARS_PER_LINE for line in caption_lines)
     assert " ".join(caption_lines) == long_text.upper()
+
+
+def test_extract_shorts_caption_textfile_uses_lf_line_endings(tmp_path, fixture_image, fixture_audio):
+    """Regression test: Path.write_text translates '\\n' to os.linesep, so on
+    Windows the caption textfile got CRLF endings. drawtext treats the stray
+    '\\r' as one more line break and renders a phantom blank line between every
+    caption line, double-spacing the on-screen caption. read_text() hid the
+    bug by translating CRLF back, so assert on the raw bytes."""
+    assembler = VideoAssembler(workspace=tmp_path, assets_dir=tmp_path / "assets")
+
+    long_text = "You tapped a small piece of plastic and your brain felt no pain at all."
+    segments = [{"text": long_text, "is_short_candidate": True}]
+    clips = [
+        assembler.create_segment_video(fixture_image, fixture_audio, tmp_path / "clip_00.mp4", 1.0),
+    ]
+
+    assembler.extract_shorts(clips, segments, tmp_path / "shorts")
+
+    caption_bytes = (tmp_path / "short_00_caption.txt").read_bytes()
+    assert b"\n" in caption_bytes, "expected a wrapped multi-line caption"
+    assert b"\r" not in caption_bytes

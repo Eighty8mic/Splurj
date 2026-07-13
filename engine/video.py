@@ -208,7 +208,9 @@ class VideoAssembler:
 
             caption = self._wrap_caption(segments[start]["text"])
             caption_path = self.workspace / f"short_{i:02d}_caption.txt"
-            caption_path.write_text(caption, encoding="utf-8")
+            # newline="\n": drawtext renders a CRLF as two line breaks, which
+            # double-spaces the caption when Windows translates "\n" on write.
+            caption_path.write_text(caption, encoding="utf-8", newline="\n")
 
             # Escape the colon in Windows font/text-file paths for ffmpeg filter syntax,
             # and use forward slashes so the path itself doesn't confuse the filter parser.
