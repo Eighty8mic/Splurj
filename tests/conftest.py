@@ -4,6 +4,20 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _isolate_dotenv(monkeypatch):
+    """Tests must never read the developer's real .env file.
+
+    load_dotenv() locates .env relative to the calling module's directory, so
+    it finds the project .env even when a test monkeypatch.delenv()s a key or
+    chdirs away — making 'missing key' tests pass or fail depending on the
+    developer's local setup. No-op it for every test; tests that need env
+    values set them explicitly with monkeypatch.setenv().
+    """
+    monkeypatch.setattr("splurj_engine.load_dotenv", lambda *args, **kwargs: False)
+    monkeypatch.setattr("generate_character_reference.load_dotenv", lambda *args, **kwargs: False)
+
+
 def _run(cmd):
     result = subprocess.run(cmd, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
