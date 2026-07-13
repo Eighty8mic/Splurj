@@ -108,8 +108,15 @@ class VideoAssembler:
         tracks = sorted(f for f in self.ambient_dir.iterdir() if f.suffix.lower() in exts)
         return tracks[0] if tracks else None
 
-    def mix_ambient_audio(self, video_path: Path, output_path: Path, ambient_db: float = -15.0) -> Path:
-        ambient_track = self.get_ambient_track()
+    def mix_ambient_audio(
+        self,
+        video_path: Path,
+        output_path: Path,
+        ambient_db: float = -15.0,
+        ambient_track: Optional[Path] = None,
+    ) -> Path:
+        if ambient_track is None:
+            ambient_track = self.get_ambient_track()
 
         if ambient_track is None:
             logger.warning("No ambient tracks in %s — skipping ambient mix.", self.ambient_dir)

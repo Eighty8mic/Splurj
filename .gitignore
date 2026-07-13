@@ -8,6 +8,12 @@ client_secret*.json
 cache/images/*
 !cache/images/.gitkeep
 
+cache/music/*
+!cache/music/.gitkeep
+
+cache/sfx/*
+!cache/sfx/.gitkeep
+
 workspace/*
 !workspace/.gitkeep
 

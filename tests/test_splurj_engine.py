@@ -7,6 +7,7 @@ import pytest
 
 from splurj_engine import (
     DISCLAIMER,
+    MUSIC_BED_LENGTH_MS,
     build_description,
     build_shorts_title,
     build_thumbnail_prompts,
@@ -155,11 +156,17 @@ def test_run_pipeline_end_to_end_with_mocked_apis(tmp_path, fixture_image, fixtu
         lambda prompt, output_path, reference_image_path=None, max_retries=4: shutil.copy2(fixture_image, output_path) or output_path
     )
 
+    fake_music_gen = MagicMock()
+    fake_music_gen.compose.side_effect = (
+        lambda prompt, duration_ms, output_path, max_retries=4: shutil.copy2(fixture_audio, output_path) or output_path
+    )
+
     fake_uploader = MagicMock()
     fake_uploader.upload.return_value = {"id": "vid-fake"}
 
     with patch("splurj_engine.AudioGenerator", return_value=fake_audio_gen), \
          patch("splurj_engine.ImageGenerator", return_value=fake_image_gen), \
+         patch("splurj_engine.MusicGenerator", return_value=fake_music_gen), \
          patch("splurj_engine.YouTubeUploader", return_value=fake_uploader):
 
         env = {
@@ -202,8 +209,14 @@ def test_run_pipeline_skip_upload_does_not_call_youtube(tmp_path, fixture_image,
         lambda prompt, output_path, reference_image_path=None, max_retries=4: shutil.copy2(fixture_image, output_path) or output_path
     )
 
+    fake_music_gen = MagicMock()
+    fake_music_gen.compose.side_effect = (
+        lambda prompt, duration_ms, output_path, max_retries=4: shutil.copy2(fixture_audio, output_path) or output_path
+    )
+
     with patch("splurj_engine.AudioGenerator", return_value=fake_audio_gen), \
          patch("splurj_engine.ImageGenerator", return_value=fake_image_gen), \
+         patch("splurj_engine.MusicGenerator", return_value=fake_music_gen), \
          patch("splurj_engine.YouTubeUploader") as mock_uploader_cls:
 
         env = {
@@ -214,3 +227,113 @@ def test_run_pipeline_skip_upload_does_not_call_youtube(tmp_path, fixture_image,
 
     assert result["long_form"].exists()
     mock_uploader_cls.assert_not_called()
+
+
+def test_run_pipeline_generates_music_when_no_manual_ambient_track(tmp_path, fixture_image, fixture_audio, monkeypatch):
+    monkeypatch.setattr("splurj_engine.WORKSPACE", tmp_path / "workspace")
+    monkeypatch.setattr("splurj_engine.OUTPUT_DIR", tmp_path / "output")
+    monkeypatch.setattr("splurj_engine.ASSETS_DIR", tmp_path / "assets")
+    monkeypatch.setattr("splurj_engine.CHANNEL_DATA", tmp_path / "channel_data")
+    (tmp_path / "assets" / "ambient").mkdir(parents=True)  # present but empty
+    (tmp_path / "channel_data").mkdir(parents=True)
+
+    fake_audio_gen = MagicMock()
+    fake_audio_gen.generate_segment.side_effect = (
+        lambda text, output_path, directive="", max_retries=4: shutil.copy2(fixture_audio, output_path) or output_path
+    )
+    fake_audio_gen.probe_duration.side_effect = lambda audio_path: 1.0
+
+    fake_image_gen = MagicMock()
+    fake_image_gen.generate.side_effect = (
+        lambda prompt, output_path, reference_image_path=None, max_retries=4: shutil.copy2(fixture_image, output_path) or output_path
+    )
+
+    fake_music_gen = MagicMock()
+    fake_music_gen.compose.side_effect = (
+        lambda prompt, duration_ms, output_path, max_retries=4: shutil.copy2(fixture_audio, output_path) or output_path
+    )
+
+    with patch("splurj_engine.AudioGenerator", return_value=fake_audio_gen), \
+         patch("splurj_engine.ImageGenerator", return_value=fake_image_gen), \
+         patch("splurj_engine.MusicGenerator", return_value=fake_music_gen), \
+         patch("splurj_engine.YouTubeUploader"):
+
+        env = {
+            "ELEVENLABS_API_KEY": "a", "ELEVENLABS_VOICE_ID": "b",
+            "GEMINI_API_KEY": "c", "YOUTUBE_CLIENT_SECRET": "d",
+        }
+        result = run_pipeline(_valid_blueprint(), env, skip_upload=True)
+
+    assert result["long_form"].exists()
+    fake_music_gen.compose.assert_called_once()
+    _, kwargs = fake_music_gen.compose.call_args
+    assert kwargs["duration_ms"] == MUSIC_BED_LENGTH_MS
+
+
+def test_run_pipeline_skips_music_generation_when_manual_ambient_track_present(tmp_path, fixture_image, fixture_audio, monkeypatch):
+    monkeypatch.setattr("splurj_engine.WORKSPACE", tmp_path / "workspace")
+    monkeypatch.setattr("splurj_engine.OUTPUT_DIR", tmp_path / "output")
+    monkeypatch.setattr("splurj_engine.ASSETS_DIR", tmp_path / "assets")
+    monkeypatch.setattr("splurj_engine.CHANNEL_DATA", tmp_path / "channel_data")
+    ambient_dir = tmp_path / "assets" / "ambient"
+    ambient_dir.mkdir(parents=True)
+    shutil.copy2(fixture_audio, ambient_dir / "manual_drone.mp3")
+    (tmp_path / "channel_data").mkdir(parents=True)
+
+    fake_audio_gen = MagicMock()
+    fake_audio_gen.generate_segment.side_effect = (
+        lambda text, output_path, directive="", max_retries=4: shutil.copy2(fixture_audio, output_path) or output_path
+    )
+    fake_audio_gen.probe_duration.side_effect = lambda audio_path: 1.0
+
+    fake_image_gen = MagicMock()
+    fake_image_gen.generate.side_effect = (
+        lambda prompt, output_path, reference_image_path=None, max_retries=4: shutil.copy2(fixture_image, output_path) or output_path
+    )
+
+    with patch("splurj_engine.AudioGenerator", return_value=fake_audio_gen), \
+         patch("splurj_engine.ImageGenerator", return_value=fake_image_gen), \
+         patch("splurj_engine.MusicGenerator") as mock_music_cls, \
+         patch("splurj_engine.YouTubeUploader"):
+
+        env = {
+            "ELEVENLABS_API_KEY": "a", "ELEVENLABS_VOICE_ID": "b",
+            "GEMINI_API_KEY": "c", "YOUTUBE_CLIENT_SECRET": "d",
+        }
+        result = run_pipeline(_valid_blueprint(), env, skip_upload=True)
+
+    assert result["long_form"].exists()
+    mock_music_cls.assert_not_called()
+
+
+def test_run_pipeline_continues_without_music_if_generation_fails(tmp_path, fixture_image, fixture_audio, monkeypatch):
+    monkeypatch.setattr("splurj_engine.WORKSPACE", tmp_path / "workspace")
+    monkeypatch.setattr("splurj_engine.OUTPUT_DIR", tmp_path / "output")
+    monkeypatch.setattr("splurj_engine.ASSETS_DIR", tmp_path / "assets")
+    monkeypatch.setattr("splurj_engine.CHANNEL_DATA", tmp_path / "channel_data")
+    (tmp_path / "assets" / "ambient").mkdir(parents=True)
+    (tmp_path / "channel_data").mkdir(parents=True)
+
+    fake_audio_gen = MagicMock()
+    fake_audio_gen.generate_segment.side_effect = (
+        lambda text, output_path, directive="", max_retries=4: shutil.copy2(fixture_audio, output_path) or output_path
+    )
+    fake_audio_gen.probe_duration.side_effect = lambda audio_path: 1.0
+
+    fake_image_gen = MagicMock()
+    fake_image_gen.generate.side_effect = (
+        lambda prompt, output_path, reference_image_path=None, max_retries=4: shutil.copy2(fixture_image, output_path) or output_path
+    )
+
+    with patch("splurj_engine.AudioGenerator", return_value=fake_audio_gen), \
+         patch("splurj_engine.ImageGenerator", return_value=fake_image_gen), \
+         patch("splurj_engine.MusicGenerator", side_effect=RuntimeError("account has no music access")), \
+         patch("splurj_engine.YouTubeUploader"):
+
+        env = {
+            "ELEVENLABS_API_KEY": "a", "ELEVENLABS_VOICE_ID": "b",
+            "GEMINI_API_KEY": "c", "YOUTUBE_CLIENT_SECRET": "d",
+        }
+        result = run_pipeline(_valid_blueprint(), env, skip_upload=True)  # must not raise
+
+    assert result["long_form"].exists()

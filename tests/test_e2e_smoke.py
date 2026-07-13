@@ -26,7 +26,12 @@ def _patch_generators(fixture_image, fixture_audio):
     fake_image_gen.generate.side_effect = (
         lambda prompt, output_path, reference_image_path=None, max_retries=4: shutil.copy2(fixture_image, output_path) or output_path
     )
-    return fake_audio_gen, fake_image_gen
+
+    fake_music_gen = MagicMock()
+    fake_music_gen.compose.side_effect = (
+        lambda prompt, duration_ms, output_path, max_retries=4: shutil.copy2(fixture_audio, output_path) or output_path
+    )
+    return fake_audio_gen, fake_image_gen, fake_music_gen
 
 
 def test_content_example_loads_and_validates():
@@ -37,7 +42,7 @@ def test_content_example_loads_and_validates():
 
 def test_cli_main_no_upload_renders_and_cleans_workspace(tmp_path, fixture_image, fixture_audio, monkeypatch):
     _patch_dirs(monkeypatch, tmp_path)
-    fake_audio_gen, fake_image_gen = _patch_generators(fixture_image, fixture_audio)
+    fake_audio_gen, fake_image_gen, fake_music_gen = _patch_generators(fixture_image, fixture_audio)
 
     for key, val in {
         "ELEVENLABS_API_KEY": "a", "ELEVENLABS_VOICE_ID": "b",
@@ -47,6 +52,7 @@ def test_cli_main_no_upload_renders_and_cleans_workspace(tmp_path, fixture_image
 
     with patch("splurj_engine.AudioGenerator", return_value=fake_audio_gen), \
          patch("splurj_engine.ImageGenerator", return_value=fake_image_gen), \
+         patch("splurj_engine.MusicGenerator", return_value=fake_music_gen), \
          patch.object(sys, "argv", ["splurj_engine.py", "--input", "content_example.json", "--no-upload"]):
         main()
 
@@ -64,7 +70,7 @@ def test_cli_main_no_upload_renders_and_cleans_workspace(tmp_path, fixture_image
 
 def test_cli_main_keep_workspace_preserves_temp_files(tmp_path, fixture_image, fixture_audio, monkeypatch):
     _patch_dirs(monkeypatch, tmp_path)
-    fake_audio_gen, fake_image_gen = _patch_generators(fixture_image, fixture_audio)
+    fake_audio_gen, fake_image_gen, fake_music_gen = _patch_generators(fixture_image, fixture_audio)
 
     for key, val in {
         "ELEVENLABS_API_KEY": "a", "ELEVENLABS_VOICE_ID": "b",
@@ -74,6 +80,7 @@ def test_cli_main_keep_workspace_preserves_temp_files(tmp_path, fixture_image, f
 
     with patch("splurj_engine.AudioGenerator", return_value=fake_audio_gen), \
          patch("splurj_engine.ImageGenerator", return_value=fake_image_gen), \
+         patch("splurj_engine.MusicGenerator", return_value=fake_music_gen), \
          patch.object(sys, "argv", ["splurj_engine.py", "--input", "content_example.json", "--no-upload", "--keep-workspace"]):
         main()
 

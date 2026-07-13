@@ -1,5 +1,6 @@
 import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -63,6 +64,32 @@ def test_mix_ambient_audio_mixes_when_track_present(tmp_path, fixture_image, fix
     clip = assembler.create_segment_video(fixture_image, fixture_audio, tmp_path / "clip.mp4", 1.0)
     out = tmp_path / "mixed.mp4"
     result = assembler.mix_ambient_audio(clip, out, ambient_db=-15.0)
+
+    assert result == out
+    assert out.exists()
+    assert out.stat().st_size > 0
+
+
+def test_mix_ambient_audio_prefers_explicit_track_over_assets_dir(tmp_path, fixture_image, fixture_audio):
+    """Regression test: an explicitly passed ambient_track (e.g. auto-generated
+    background music) must be used even when assets/ambient/ also has a file —
+    generate_all_assets should never silently ignore its own generated track."""
+    assets_dir = tmp_path / "assets"
+    ambient_dir = assets_dir / "ambient"
+    ambient_dir.mkdir(parents=True)
+    import shutil
+    shutil.copy2(fixture_audio, ambient_dir / "manual_drone.mp3")
+
+    generated_track = tmp_path / "generated_music.mp3"
+    shutil.copy2(fixture_audio, generated_track)
+
+    assembler = VideoAssembler(workspace=tmp_path, assets_dir=assets_dir)
+    clip = assembler.create_segment_video(fixture_image, fixture_audio, tmp_path / "clip.mp4", 1.0)
+    out = tmp_path / "mixed.mp4"
+
+    with patch.object(assembler, "get_ambient_track") as spy:
+        result = assembler.mix_ambient_audio(clip, out, ambient_track=generated_track)
+        spy.assert_not_called()
 
     assert result == out
     assert out.exists()

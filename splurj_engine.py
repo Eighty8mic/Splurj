@@ -23,8 +23,13 @@ from dotenv import load_dotenv
 
 from engine.audio import AudioGenerator
 from engine.images import ImageGenerator
+from engine.music import MusicGenerator
 from engine.video import VideoAssembler
 from engine.youtube import YouTubeUploader
+
+# A short loopable bed is enough — mix_ambient_audio already loops the
+# ambient track (-stream_loop -1) to cover the full video length.
+MUSIC_BED_LENGTH_MS = 60_000
 
 BASE_DIR = Path(__file__).parent
 WORKSPACE = BASE_DIR / "workspace"
@@ -125,6 +130,16 @@ def slugify(text: str) -> str:
     text = re.sub(r"[^\w\s-]", "", text)
     text = re.sub(r"[\s_-]+", "_", text)
     return text[:50].strip("_")
+
+
+def build_music_prompt(blueprint: Dict[str, Any]) -> str:
+    directive = blueprint["voiceover"].get("directive", "")
+    title = blueprint["metadata"]["title"]
+    return (
+        f"Instrumental background music bed for a calm, educational YouTube video "
+        f"titled '{title}'. Mood: {directive} Minimal and unobtrusive so the "
+        "narration stays the focus — no vocals, subtle loopable texture."
+    )
 
 
 def build_description(meta_description: str, full_script: str, day: int) -> str:
@@ -284,8 +299,24 @@ def run_pipeline(
 
     logger.info("Ambient audio mix…")
     ambient_db = float(os.getenv("AMBIENT_DB", "-15"))
+    ambient_track = assembler.get_ambient_track()
+    if ambient_track is None:
+        logger.info("No manual ambient track — composing background music…")
+        try:
+            music_gen = MusicGenerator(
+                api_key=env["ELEVENLABS_API_KEY"],
+                model=os.getenv("ELEVENLABS_MUSIC_MODEL", "music_v2"),
+            )
+            ambient_track = music_gen.compose(
+                build_music_prompt(blueprint),
+                duration_ms=MUSIC_BED_LENGTH_MS,
+                output_path=run_ws / "background_music.mp3",
+            )
+        except Exception as exc:
+            logger.warning("Background music generation failed, continuing without: %s", exc)
+            ambient_track = None
     mixed_path = run_ws / "with_ambient.mp4"
-    assembler.mix_ambient_audio(concat_path, mixed_path, ambient_db=ambient_db)
+    assembler.mix_ambient_audio(concat_path, mixed_path, ambient_db=ambient_db, ambient_track=ambient_track)
 
     logger.info("Final render…")
     output_filename = f"day_{day:03d}_{slugify(title)}.mp4"
