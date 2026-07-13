@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from engine.video import VideoAssembler, probe_video_resolution
+from engine.video import CAPTION_MAX_CHARS_PER_LINE, VideoAssembler, probe_video_resolution
 
 
 def test_create_segment_video_outputs_16x9_canvas(tmp_path, fixture_image, fixture_audio):
@@ -158,7 +158,9 @@ def test_extract_shorts_preserves_apostrophes_and_percent_signs(tmp_path, fixtur
 
     caption_file = tmp_path / "short_00_caption.txt"
     assert caption_file.exists()
-    assert caption_file.read_text(encoding="utf-8") == caption_text.upper()
+    # Captions are wrapped to fit the frame; apostrophes and '%' must survive
+    # the wrapping, so compare with line breaks collapsed back to spaces.
+    assert caption_file.read_text(encoding="utf-8").replace("\n", " ") == caption_text.upper()
 
     # Real-render assertion: the textfile content above is the INPUT to ffmpeg's
     # drawtext filter, not proof anything was actually drawn. drawtext's
@@ -192,3 +194,42 @@ def test_extract_shorts_preserves_apostrophes_and_percent_signs(tmp_path, fixtur
         "none — the '%' in the caption likely triggered ffmpeg drawtext's "
         "'Stray %' silent-blank-render bug (expansion=normal by default)."
     )
+
+
+def test_wrap_caption_breaks_long_captions_into_screen_width_lines():
+    """Regression test: drawtext never wraps text, so any caption wider than the
+    1080px frame is clipped off both edges (fontsize=64 fits only ~22 chars).
+    The caption must be pre-wrapped into newline-separated lines before it is
+    written to the drawtext textfile."""
+    text = "You tapped a small piece of plastic and your brain felt no pain at all."
+
+    wrapped = VideoAssembler._wrap_caption(text)
+    lines = wrapped.split("\n")
+
+    assert len(lines) > 1
+    assert all(len(line) <= CAPTION_MAX_CHARS_PER_LINE for line in lines)
+    assert " ".join(lines) == text.upper()
+
+
+def test_wrap_caption_leaves_short_captions_on_one_line():
+    assert VideoAssembler._wrap_caption("Save more.") == "SAVE MORE."
+
+
+def test_extract_shorts_writes_wrapped_caption_textfile(tmp_path, fixture_image, fixture_audio):
+    assembler = VideoAssembler(workspace=tmp_path, assets_dir=tmp_path / "assets")
+
+    long_text = "You tapped a small piece of plastic and your brain felt no pain at all."
+    segments = [{"text": long_text, "is_short_candidate": True}]
+    clips = [
+        assembler.create_segment_video(fixture_image, fixture_audio, tmp_path / "clip_00.mp4", 1.0),
+    ]
+
+    shorts = assembler.extract_shorts(clips, segments, tmp_path / "shorts")
+
+    assert len(shorts) == 1
+    assert probe_video_resolution(shorts[0]) == (1080, 1920)
+
+    caption_lines = (tmp_path / "short_00_caption.txt").read_text(encoding="utf-8").split("\n")
+    assert len(caption_lines) > 1
+    assert all(len(line) <= CAPTION_MAX_CHARS_PER_LINE for line in caption_lines)
+    assert " ".join(caption_lines) == long_text.upper()

@@ -12,10 +12,16 @@ import json
 import logging
 import shutil
 import subprocess
+import textwrap
 from pathlib import Path
 from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+# drawtext never wraps text, so captions must be pre-wrapped to fit the
+# 1080px-wide Shorts frame: Arial Bold at fontsize=64 averages ~44px per
+# ALL-CAPS glyph, so 22 chars ≈ 970px, leaving a safe margin on each side.
+CAPTION_MAX_CHARS_PER_LINE = 22
 
 
 def _run(cmd: List[str], label: str) -> None:
@@ -174,6 +180,11 @@ class VideoAssembler:
             runs.append((start, len(segments) - 1))
         return runs
 
+    @staticmethod
+    def _wrap_caption(text: str) -> str:
+        """Upper-case a caption and wrap it into lines that fit the 1080px frame."""
+        return textwrap.fill(text.upper(), width=CAPTION_MAX_CHARS_PER_LINE)
+
     def extract_shorts(
         self,
         segment_clips: List[Path],
@@ -195,7 +206,7 @@ class VideoAssembler:
             raw_concat = self.workspace / f"short_{i:02d}_raw.mp4"
             self.concatenate_segments(run_clips, raw_concat)
 
-            caption = segments[start]["text"].upper()
+            caption = self._wrap_caption(segments[start]["text"])
             caption_path = self.workspace / f"short_{i:02d}_caption.txt"
             caption_path.write_text(caption, encoding="utf-8")
 
