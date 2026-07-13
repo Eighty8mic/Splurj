@@ -53,6 +53,50 @@ def test_run_queued_renders_with_upload_enabled_and_archives_on_success(tmp_path
     assert json.loads(archived[0].read_text(encoding="utf-8"))["day"] == 9
 
 
+def test_run_queued_auto_drafts_when_nothing_queued_then_renders(tmp_path):
+    next_path = tmp_path / "next.json"  # does not exist -- triggers auto-draft
+    processed_dir = tmp_path / "processed"
+    drafted = _blueprint(day=3)
+
+    fake_env = {
+        "ELEVENLABS_API_KEY": "a", "ELEVENLABS_VOICE_ID": "b",
+        "GEMINI_API_KEY": "c", "YOUTUBE_CLIENT_SECRET": "d",
+    }
+
+    with patch("splurj_engine.load_env", return_value=fake_env), \
+         patch("splurj_draft._read_next_day", return_value=3), \
+         patch("splurj_draft._write_next_day") as mock_write_next_day, \
+         patch("splurj_draft.draft_blueprint", return_value=drafted) as mock_draft, \
+         patch("splurj_engine.run_pipeline") as mock_run_pipeline:
+        run_queued(next_path=next_path, processed_dir=processed_dir)
+
+    mock_draft.assert_called_once_with(3, "c")
+    mock_write_next_day.assert_called_once_with(4)
+    mock_run_pipeline.assert_called_once()
+    archived = list(processed_dir.glob("*_next.json"))
+    assert len(archived) == 1
+    assert json.loads(archived[0].read_text(encoding="utf-8"))["day"] == 3
+
+
+def test_run_queued_noops_silently_when_auto_draft_fails(tmp_path):
+    next_path = tmp_path / "next.json"
+    processed_dir = tmp_path / "processed"
+
+    fake_env = {
+        "ELEVENLABS_API_KEY": "a", "ELEVENLABS_VOICE_ID": "b",
+        "GEMINI_API_KEY": "c", "YOUTUBE_CLIENT_SECRET": "d",
+    }
+
+    with patch("splurj_engine.load_env", return_value=fake_env), \
+         patch("splurj_draft._read_next_day", return_value=3), \
+         patch("splurj_draft.draft_blueprint", side_effect=RuntimeError("citation QA exhausted")), \
+         patch("splurj_engine.run_pipeline") as mock_run_pipeline:
+        run_queued(next_path=next_path, processed_dir=processed_dir)  # must not raise
+
+    mock_run_pipeline.assert_not_called()
+    assert not next_path.exists()
+
+
 def test_run_queued_leaves_file_in_place_when_render_fails(tmp_path):
     next_path = tmp_path / "next.json"
     next_path.write_text(json.dumps(_blueprint()), encoding="utf-8")

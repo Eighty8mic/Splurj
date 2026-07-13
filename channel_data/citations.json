@@ -1,0 +1,123 @@
+[
+  {
+    "id": 1,
+    "researchers": "Daniel Kahneman & Amos Tversky",
+    "study_ref": "Prospect Theory: An Analysis of Decision under Risk",
+    "year": 1979,
+    "venue": "Econometrica",
+    "summary": "Introduced prospect theory: losses are weighted roughly twice as heavily as equivalent gains (loss aversion), and people evaluate outcomes relative to a reference point rather than in absolute terms.",
+    "source_url": "https://scholar.google.com/scholar?q=Daniel%20Kahneman%20%26%20Amos%20Tversky%20Prospect%20Theory%3A%20An%20Analysis%20of%20Decision%20under%20Risk%201979",
+    "status": "approved",
+    "contested": false
+  },
+  {
+    "id": 2,
+    "researchers": "Richard Thaler",
+    "study_ref": "Mental Accounting Matters",
+    "year": 1999,
+    "venue": "Journal of Behavioral Decision Making",
+    "summary": "Formalized mental accounting: people mentally sort money into separate, non-fungible accounts (rent, fun, savings) governed by different rules, even though money is objectively interchangeable.",
+    "source_url": "https://scholar.google.com/scholar?q=Richard%20Thaler%20Mental%20Accounting%20Matters%201999",
+    "status": "approved",
+    "contested": false
+  },
+  {
+    "id": 3,
+    "researchers": "Richard Thaler & Eric Johnson",
+    "study_ref": "Gambling with the House Money and Trying to Break Even: The Effects of Prior Outcomes on Risky Choice",
+    "year": 1990,
+    "venue": "Management Science",
+    "summary": "Documented the house money effect: people take larger risks with money framed as recent winnings than with money framed as their own capital, even though the funds are identical.",
+    "source_url": "https://scholar.google.com/scholar?q=Richard%20Thaler%20%26%20Eric%20Johnson%20Gambling%20with%20the%20House%20Money%20and%20Trying%20to%20Break%20Even%3A%20The%20Effects%20of%20Prior%20Outcomes%20on%20Risky%20Choice%201990",
+    "status": "approved",
+    "contested": false
+  },
+  {
+    "id": 4,
+    "researchers": "Dan Ariely, George Loewenstein & Drazen Prelec",
+    "study_ref": "'Coherent Arbitrariness': Stable Demand Curves Without Stable Preferences",
+    "year": 2003,
+    "venue": "Quarterly Journal of Economics",
+    "summary": "Showed that arbitrary anchors (like the last two digits of a person's Social Security number) measurably shift how much people are willing to pay for a product, even though the anchor has no logical connection to its value.",
+    "source_url": "https://scholar.google.com/scholar?q=Dan%20Ariely%2C%20George%20Loewenstein%20%26%20Drazen%20Prelec%20%27Coherent%20Arbitrariness%27%3A%20Stable%20Demand%20Curves%20Without%20Stable%20Preferences%202003",
+    "status": "approved",
+    "contested": false
+  },
+  {
+    "id": 5,
+    "researchers": "Drazen Prelec & George Loewenstein",
+    "study_ref": "The Red and the Black: Mental Accounting of Savings and Debt",
+    "year": 1998,
+    "venue": "Marketing Science",
+    "summary": "Introduced the 'pain of paying' framework: paying with cash creates a more vivid, immediate sense of loss than paying with a credit card, decoupling the pain of payment from the pleasure of consumption.",
+    "source_url": "https://scholar.google.com/scholar?q=Drazen%20Prelec%20%26%20George%20Loewenstein%20The%20Red%20and%20the%20Black%3A%20Mental%20Accounting%20of%20Savings%20and%20Debt%201998",
+    "status": "approved",
+    "contested": false
+  },
+  {
+    "id": 6,
+    "researchers": "Drazen Prelec & Duncan Simester",
+    "study_ref": "Always Leave Home Without It: A Further Investigation of the Credit-Card Effect on Willingness to Pay",
+    "year": 2001,
+    "venue": "Marketing Letters",
+    "summary": "Found in a real auction that participants bidding with credit cards were willing to pay roughly twice as much as those bidding with cash for identical items — the 'credit-card premium.'",
+    "source_url": "https://scholar.google.com/scholar?q=Drazen%20Prelec%20%26%20Duncan%20Simester%20Always%20Leave%20Home%20Without%20It%3A%20A%20Further%20Investigation%20of%20the%20Credit-Card%20Effect%20on%20Willingness%20to%20Pay%202001",
+    "status": "approved",
+    "contested": false
+  },
+  {
+    "id": 7,
+    "researchers": "Hal Hershfield et al.",
+    "study_ref": "Increasing Saving Behavior Through Age-Progressed Renderings of the Future Self",
+    "year": 2011,
+    "venue": "Journal of Marketing Research",
+    "summary": "People who interacted with an age-progressed digital rendering of themselves allocated more money to retirement savings, because it made their future self feel more psychologically real and continuous with their present self.",
+    "source_url": "https://scholar.google.com/scholar?q=Hal%20Hershfield%20et%20al.%20Increasing%20Saving%20Behavior%20Through%20Age-Progressed%20Renderings%20of%20the%20Future%20Self%202011",
+    "status": "approved",
+    "contested": false
+  },
+  {
+    "id": 8,
+    "researchers": "Brian Knutson et al.",
+    "study_ref": "Neural Predictors of Purchases",
+    "year": 2007,
+    "venue": "Neuron",
+    "summary": "Used fMRI to show that activity in the nucleus accumbens (anticipated pleasure) versus the insula (anticipated pain) before seeing a price could predict, seconds later, whether a person would decide to buy a product.",
+    "source_url": "https://scholar.google.com/scholar?q=Brian%20Knutson%20et%20al.%20Neural%20Predictors%20of%20Purchases%202007",
+    "status": "approved",
+    "contested": false
+  },
+  {
+    "id": 9,
+    "researchers": "Elizabeth Dunn, Lara Aknin & Michael Norton",
+    "study_ref": "Spending Money on Others Promotes Happiness",
+    "year": 2008,
+    "venue": "Science",
+    "summary": "Spending money on other people ('prosocial spending') produced a more reliable boost in happiness than spending the same amount on oneself, across both survey data and a randomized experiment.",
+    "source_url": "https://scholar.google.com/scholar?q=Elizabeth%20Dunn%2C%20Lara%20Aknin%20%26%20Michael%20Norton%20Spending%20Money%20on%20Others%20Promotes%20Happiness%202008",
+    "status": "approved",
+    "contested": false
+  },
+  {
+    "id": 10,
+    "researchers": "Kathleen Vohs, Nicole Mead & Miranda Goode",
+    "study_ref": "The Psychological Consequences of Money",
+    "year": 2006,
+    "venue": "Science",
+    "summary": "Subtly reminding people of money (priming) made them behave more self-sufficiently and less communally — working harder alone, giving less help, preferring more personal space.",
+    "source_url": "https://scholar.google.com/scholar?q=Kathleen%20Vohs%2C%20Nicole%20Mead%20%26%20Miranda%20Goode%20The%20Psychological%20Consequences%20of%20Money%202006",
+    "status": "approved",
+    "contested": true
+  },
+  {
+    "id": 11,
+    "researchers": "Hersh Shefrin & Meir Statman",
+    "study_ref": "The Disposition to Sell Winners Too Early and Ride Losers Too Long: Theory and Evidence",
+    "year": 1985,
+    "venue": "The Journal of Finance",
+    "summary": "Documented the disposition effect: investors are more willing to realize gains than losses, selling winning positions too early and holding losing positions too long.",
+    "source_url": "https://scholar.google.com/scholar?q=Hersh%20Shefrin%20%26%20Meir%20Statman%20The%20Disposition%20to%20Sell%20Winners%20Too%20Early%20and%20Ride%20Losers%20Too%20Long%3A%20Theory%20and%20Evidence%201985",
+    "status": "approved",
+    "contested": false
+  }
+]
