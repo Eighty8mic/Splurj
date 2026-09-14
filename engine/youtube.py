@@ -57,6 +57,38 @@ def _truncate_tags(tags: List[str], max_chars: int = 500) -> List[str]:
     return result
 
 
+def has_valid_cached_token() -> bool:
+    """Check the cached token without ever falling through to the interactive flow.
+
+    An unattended nightly run has nobody there to click the consent screen --
+    InstalledAppFlow.run_local_server(open_browser=True) would just hang waiting
+    for a callback that never arrives. Callers should use this as a preflight so
+    a dead token fails fast instead of hanging.
+    """
+    if not TOKEN_CACHE.exists():
+        return False
+
+    try:
+        with open(TOKEN_CACHE, "rb") as fh:
+            creds = pickle.load(fh)
+    except Exception:
+        return False
+
+    if creds and creds.valid:
+        return True
+
+    if creds and creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(Request())
+        except Exception:
+            return False
+        with open(TOKEN_CACHE, "wb") as fh:
+            pickle.dump(creds, fh)
+        return True
+
+    return False
+
+
 class YouTubeUploader:
     def __init__(self, client_secret_file: str, privacy_status: str = "private"):
         self.client_secret_file = client_secret_file

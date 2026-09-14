@@ -1,9 +1,10 @@
+import pickle
 from unittest.mock import MagicMock, patch
 
 import pytest
 from googleapiclient.errors import HttpError
 
-from engine.youtube import DEFAULT_CATEGORY, YouTubeUploader, _truncate_tags
+from engine.youtube import DEFAULT_CATEGORY, YouTubeUploader, _truncate_tags, has_valid_cached_token
 
 
 def _make_uploader(tmp_path):
@@ -123,3 +124,68 @@ def test_truncate_tags_short_list_unchanged():
     result = _truncate_tags(tags, max_chars=500)
 
     assert result == tags
+
+
+def _fake_token_cache(tmp_path, monkeypatch) -> None:
+    """Point TOKEN_CACHE at a real (but content-irrelevant) file.
+
+    has_valid_cached_token() only needs TOKEN_CACHE.exists() to be True;
+    pickle.load is mocked separately per test so creds can be a MagicMock
+    (MagicMocks aren't reliably picklable, so we never round-trip one through
+    a real pickle file).
+    """
+    cache = tmp_path / "yt_token.pickle"
+    cache.write_bytes(b"placeholder")
+    monkeypatch.setattr("engine.youtube.TOKEN_CACHE", cache)
+
+
+def test_has_valid_cached_token_false_when_no_cache_file(tmp_path, monkeypatch):
+    monkeypatch.setattr("engine.youtube.TOKEN_CACHE", tmp_path / "missing.pickle")
+
+    assert has_valid_cached_token() is False
+
+
+def test_has_valid_cached_token_false_when_cache_unreadable(tmp_path, monkeypatch):
+    _fake_token_cache(tmp_path, monkeypatch)
+
+    with patch("engine.youtube.pickle.load", side_effect=pickle.UnpicklingError("bad data")):
+        assert has_valid_cached_token() is False
+
+
+def test_has_valid_cached_token_true_when_creds_already_valid(tmp_path, monkeypatch):
+    _fake_token_cache(tmp_path, monkeypatch)
+    creds = MagicMock(valid=True)
+
+    with patch("engine.youtube.pickle.load", return_value=creds):
+        assert has_valid_cached_token() is True
+
+
+def test_has_valid_cached_token_refreshes_expired_creds(tmp_path, monkeypatch):
+    _fake_token_cache(tmp_path, monkeypatch)
+    creds = MagicMock(valid=False, expired=True, refresh_token="rt")
+
+    with patch("engine.youtube.pickle.load", return_value=creds), \
+         patch("engine.youtube.pickle.dump") as mock_dump, \
+         patch("engine.youtube.Request"):
+        assert has_valid_cached_token() is True
+
+    creds.refresh.assert_called_once()
+    mock_dump.assert_called_once()  # refreshed creds re-saved to the cache
+
+
+def test_has_valid_cached_token_false_when_refresh_fails(tmp_path, monkeypatch):
+    _fake_token_cache(tmp_path, monkeypatch)
+    creds = MagicMock(valid=False, expired=True, refresh_token="rt")
+    creds.refresh.side_effect = Exception("invalid_grant")
+
+    with patch("engine.youtube.pickle.load", return_value=creds), \
+         patch("engine.youtube.Request"):
+        assert has_valid_cached_token() is False
+
+
+def test_has_valid_cached_token_false_when_no_refresh_token(tmp_path, monkeypatch):
+    _fake_token_cache(tmp_path, monkeypatch)
+    creds = MagicMock(valid=False, expired=True, refresh_token=None)
+
+    with patch("engine.youtube.pickle.load", return_value=creds):
+        assert has_valid_cached_token() is False
