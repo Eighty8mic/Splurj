@@ -22,7 +22,8 @@ def test_run_queued_noops_when_nothing_queued(tmp_path):
     next_path = tmp_path / "next.json"  # does not exist
     processed_dir = tmp_path / "processed"
 
-    with patch("splurj_engine.run_pipeline") as mock_run_pipeline:
+    with patch("engine.youtube.has_valid_cached_token", return_value=True), \
+         patch("splurj_engine.run_pipeline") as mock_run_pipeline:
         run_queued(next_path=next_path, processed_dir=processed_dir)
 
     mock_run_pipeline.assert_not_called()
@@ -40,6 +41,7 @@ def test_run_queued_renders_with_upload_enabled_and_archives_on_success(tmp_path
     }
 
     with patch("splurj_engine.load_env", return_value=fake_env), \
+         patch("engine.youtube.has_valid_cached_token", return_value=True), \
          patch("splurj_engine.run_pipeline") as mock_run_pipeline:
         run_queued(next_path=next_path, processed_dir=processed_dir)
 
@@ -64,6 +66,7 @@ def test_run_queued_auto_drafts_when_nothing_queued_then_renders(tmp_path):
     }
 
     with patch("splurj_engine.load_env", return_value=fake_env), \
+         patch("engine.youtube.has_valid_cached_token", return_value=True), \
          patch("splurj_draft._read_next_day", return_value=3), \
          patch("splurj_draft._write_next_day") as mock_write_next_day, \
          patch("splurj_draft.draft_blueprint", return_value=drafted) as mock_draft, \
@@ -88,6 +91,7 @@ def test_run_queued_noops_silently_when_auto_draft_fails(tmp_path):
     }
 
     with patch("splurj_engine.load_env", return_value=fake_env), \
+         patch("engine.youtube.has_valid_cached_token", return_value=True), \
          patch("splurj_draft._read_next_day", return_value=3), \
          patch("splurj_draft.draft_blueprint", side_effect=RuntimeError("citation QA exhausted")), \
          patch("splurj_engine.run_pipeline") as mock_run_pipeline:
@@ -108,9 +112,28 @@ def test_run_queued_leaves_file_in_place_when_render_fails(tmp_path):
     }
 
     with patch("splurj_engine.load_env", return_value=fake_env), \
+         patch("engine.youtube.has_valid_cached_token", return_value=True), \
          patch("splurj_engine.run_pipeline", side_effect=RuntimeError("API error")):
         with pytest.raises(RuntimeError, match="API error"):
             run_queued(next_path=next_path, processed_dir=processed_dir)
 
     assert next_path.exists()  # left in place so the next scheduled run retries it
     assert not processed_dir.exists() or not list(processed_dir.glob("*"))
+
+
+def test_run_queued_notifies_and_skips_when_auth_invalid(tmp_path):
+    next_path = tmp_path / "next.json"
+    next_path.write_text(json.dumps(_blueprint()), encoding="utf-8")
+    processed_dir = tmp_path / "processed"
+
+    with patch("engine.youtube.has_valid_cached_token", return_value=False), \
+         patch("engine.notify.notify_auth_failure") as mock_notify, \
+         patch("splurj_engine.run_pipeline") as mock_run_pipeline, \
+         patch("splurj_draft.draft_blueprint") as mock_draft:
+        run_queued(next_path=next_path, processed_dir=processed_dir)
+
+    mock_notify.assert_called_once()
+    mock_run_pipeline.assert_not_called()
+    mock_draft.assert_not_called()
+    assert next_path.exists()  # untouched -- nothing was rendered or archived
+    assert not processed_dir.exists()

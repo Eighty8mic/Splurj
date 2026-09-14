@@ -47,6 +47,14 @@ def _auto_draft(next_path: Path) -> None:
 
 
 def run_queued(next_path: Path = NEXT_PATH, processed_dir: Path = PROCESSED_DIR) -> None:
+    from engine.notify import notify_auth_failure
+    from engine.youtube import has_valid_cached_token
+
+    if not has_valid_cached_token():
+        notify_auth_failure("YouTube OAuth token is missing or expired -- tonight's render+upload was skipped.")
+        logger.error("YouTube auth invalid -- skipping tonight's run entirely (would hang/fail at upload).")
+        return
+
     if not next_path.exists():
         _auto_draft(next_path)
 
