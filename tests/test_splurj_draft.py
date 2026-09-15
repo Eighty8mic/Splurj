@@ -41,7 +41,7 @@ def test_draft_blueprint_returns_valid_blueprint_on_first_try(tmp_path, monkeypa
     fake_script_drafter = MagicMock()
     fake_script_drafter.draft.return_value = _script_payload()
     fake_image_drafter = MagicMock()
-    fake_image_drafter.draft_scene_prompts.return_value = ["prompt one", "prompt two"]
+    fake_image_drafter.draft_scene_poses.return_value = [["pose one-a", "pose one-b"], ["pose two-a", "pose two-b"]]
 
     with patch("splurj_draft.GeminiScriptDrafter", return_value=fake_script_drafter), \
          patch("splurj_draft.GeminiImagePromptDrafter", return_value=fake_image_drafter):
@@ -62,7 +62,7 @@ def test_draft_blueprint_retries_on_citation_violation_then_succeeds(tmp_path, m
         _script_payload(researchers_named=["Thaler"]),
     ]
     fake_image_drafter = MagicMock()
-    fake_image_drafter.draft_scene_prompts.return_value = ["prompt one", "prompt two"]
+    fake_image_drafter.draft_scene_poses.return_value = [["pose one-a", "pose one-b"], ["pose two-a", "pose two-b"]]
 
     with patch("splurj_draft.GeminiScriptDrafter", return_value=fake_script_drafter), \
          patch("splurj_draft.GeminiImagePromptDrafter", return_value=fake_image_drafter):
@@ -84,7 +84,7 @@ def test_draft_blueprint_retries_on_malformed_response_then_succeeds(tmp_path, m
         _script_payload(),
     ]
     fake_image_drafter = MagicMock()
-    fake_image_drafter.draft_scene_prompts.return_value = ["prompt one", "prompt two"]
+    fake_image_drafter.draft_scene_poses.return_value = [["pose one-a", "pose one-b"], ["pose two-a", "pose two-b"]]
 
     with patch("splurj_draft.GeminiScriptDrafter", return_value=fake_script_drafter), \
          patch("splurj_draft.GeminiImagePromptDrafter", return_value=fake_image_drafter):
@@ -106,7 +106,7 @@ def test_draft_blueprint_raises_after_max_attempts_all_violating(tmp_path, monke
         with pytest.raises(DraftError, match="Citation QA failed"):
             draft_blueprint(day=9, gemini_api_key="key")
 
-    fake_image_drafter.draft_scene_prompts.assert_not_called()  # never reached image drafting
+    fake_image_drafter.draft_scene_poses.assert_not_called()  # never reached image drafting
 
 
 def test_draft_blueprint_records_used_topic_on_success(tmp_path, monkeypatch):
@@ -115,7 +115,7 @@ def test_draft_blueprint_records_used_topic_on_success(tmp_path, monkeypatch):
     fake_script_drafter = MagicMock()
     fake_script_drafter.draft.return_value = _script_payload()
     fake_image_drafter = MagicMock()
-    fake_image_drafter.draft_scene_prompts.return_value = ["prompt one", "prompt two"]
+    fake_image_drafter.draft_scene_poses.return_value = [["pose one-a", "pose one-b"], ["pose two-a", "pose two-b"]]
 
     with patch("splurj_draft.GeminiScriptDrafter", return_value=fake_script_drafter), \
          patch("splurj_draft.GeminiImagePromptDrafter", return_value=fake_image_drafter):

@@ -13,7 +13,7 @@ def _blueprint(day=9):
         "metadata": {"title": "Test Video", "description": "A hook.", "tags": ["splurj"]},
         "voiceover": {"directive": "calm", "full_text": "Seg one."},
         "timeline": [
-            {"start": 0, "end": 15, "text": "Seg one.", "prompt": "doodle prompt", "is_short_candidate": False},
+            {"start": 0, "end": 15, "text": "Seg one.", "poses": ["doodle pose"], "is_short_candidate": False},
         ],
     }
 

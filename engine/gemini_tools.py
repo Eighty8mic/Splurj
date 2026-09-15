@@ -95,6 +95,8 @@ class GeminiPromptEnhancer:
         self._model = _MODEL
 
     def enhance_prompt(self, prompt: str, segment_text: str) -> str:
+        from engine.drafting import _enforce_style
+
         user_prompt = (
             f"{_VISUAL_RULES}\n"
             f"The narration for this frame:\n{segment_text}\n\n"
@@ -108,7 +110,7 @@ class GeminiPromptEnhancer:
 
         try:
             response = self._client.models.generate_content(model=self._model, contents=user_prompt)
-            return response.text.strip()
+            return _enforce_style(response.text.strip())
         except Exception as exc:
             logger.warning("Prompt enhancement failed — using original: %s", exc)
             return prompt
@@ -116,8 +118,8 @@ class GeminiPromptEnhancer:
     def enhance_blueprint(self, blueprint: Dict[str, Any]) -> Dict[str, Any]:
         new_timeline = []
         for i, seg in enumerate(blueprint["timeline"]):
-            logger.info("  Enhancing prompt %d/%d…", i + 1, len(blueprint["timeline"]))
-            enhanced = self.enhance_prompt(seg["prompt"], seg["text"])
-            new_timeline.append({**seg, "prompt": enhanced})
+            logger.info("  Enhancing prompt(s) %d/%d…", i + 1, len(blueprint["timeline"]))
+            enhanced_poses = [self.enhance_prompt(pose, seg["text"]) for pose in seg["poses"]]
+            new_timeline.append({**seg, "poses": enhanced_poses})
 
         return {**blueprint, "timeline": new_timeline}

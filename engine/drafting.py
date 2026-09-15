@@ -28,6 +28,7 @@ STYLE_LOCK = (
 SEGMENT_WORD_BUDGET = 45
 SCENE_SIZE = 3
 WORDS_PER_SECOND = 2.3
+POSES_PER_SCENE = 3
 
 _SCRIPT_RULES = (
     "You are the script writer for Splurj (@Splurj-it), a hand-drawn doodle YouTube channel "
@@ -54,23 +55,33 @@ _IMAGE_RULES = (
     "Background color signals tone: orange = urgency/sale/temptation, blue = science/experiment, "
     "tan = history/origins, white/yellow = happy/discovery, red accents = danger/debt/loss, "
     "green ground + blue sky = everyday outdoor life.\n"
-    "Hold scenes: each prompt covers a short run of narration, so keep it general enough to "
-    "represent that whole beat rather than one single instant.\n"
+    "Hold scenes: each beat covers a short run of narration, so keep every pose general enough "
+    "to represent that whole beat rather than one single instant.\n"
+    "For each beat, return several POSE VARIANTS of the SAME tableau: same characters, same "
+    "setting, same background color. Vary ONLY pose, gesture, expression, or one small prop "
+    "between variants — do NOT change the setting or character design between them, since these "
+    "frames are cross-faded into one short animation loop and must read as the same moment, not "
+    "different scenes.\n"
 )
+
+
+def _has_replacement_char(value: Any) -> bool:
+    if isinstance(value, str):
+        return "�" in value
+    if isinstance(value, list):
+        return any(_has_replacement_char(item) for item in value)
+    return False
 
 
 def _check_no_replacement_chars(data: Dict[str, Any]) -> None:
     """U+FFFD in a Gemini response is a rare model-output glitch (observed
     once, isolated to a single field, in an otherwise clean 2000-word draft)
     rather than a real character -- silently shipping it into a real YouTube
-    description or narration looks broken, so treat it as a malformed draft."""
+    description or narration looks broken, so treat it as a malformed draft.
+    Recurses into nested lists (e.g. scene_poses: list of pose-lists)."""
     for key, value in data.items():
-        if isinstance(value, str) and "�" in value:
+        if _has_replacement_char(value):
             raise ValueError(f"Response field '{key}' contains a U+FFFD replacement character")
-        if isinstance(value, list):
-            for item in value:
-                if isinstance(item, str) and "�" in item:
-                    raise ValueError(f"Response field '{key}' contains a U+FFFD replacement character")
 
 
 class GeminiScriptDrafter:
@@ -120,18 +131,18 @@ class GeminiImagePromptDrafter:
         self._client = genai.Client(api_key=api_key)
         self._model = _MODEL
 
-    def draft_scene_prompts(self, scene_texts: List[str]) -> List[str]:
+    def draft_scene_poses(self, scene_texts: List[str], poses_per_scene: int = POSES_PER_SCENE) -> List[List[str]]:
         from google.genai import types
 
         numbered = "\n".join(f"{i + 1}. {text}" for i, text in enumerate(scene_texts))
         prompt = (
             f"{_IMAGE_RULES}\n"
-            f"Write one image prompt for each of the {len(scene_texts)} narration beats below. "
-            "Each prompt must describe concrete visuals (characters, expressions, objects, "
-            "background color, any on-screen ALL CAPS text) — translate abstract narration into "
-            "a specific scene.\n\n"
+            f"Write {poses_per_scene} pose-variant image prompts for each of the {len(scene_texts)} "
+            "narration beats below. Each prompt must describe concrete visuals (characters, "
+            "expressions, objects, background color, any on-screen ALL CAPS text) — translate "
+            "abstract narration into a specific scene.\n\n"
             f"BEATS:\n{numbered}\n\n"
-            'Return JSON: {"scene_prompts": [one string per beat, in order]}.'
+            'Return JSON: {"scene_poses": [[one string per pose variant] for each beat, in order]}.'
         )
 
         response = self._client.models.generate_content(
@@ -145,7 +156,15 @@ class GeminiImagePromptDrafter:
             raise ValueError(f"Image prompt draft did not return valid JSON: {exc}") from exc
 
         _check_no_replacement_chars(data)
-        return [_enforce_style(p) for p in data["scene_prompts"]]
+
+        scene_poses = data["scene_poses"]
+        for i, poses in enumerate(scene_poses):
+            if len(poses) != poses_per_scene:
+                raise ValueError(
+                    f"Beat {i} returned {len(poses)} pose(s), expected {poses_per_scene}"
+                )
+
+        return [[_enforce_style(p) for p in poses] for poses in scene_poses]
 
 
 def _enforce_style(prompt: str) -> str:
@@ -200,12 +219,12 @@ def build_blueprint(
     directive: str,
     segments: List[str],
     scene_groups: List[List[int]],
-    scene_prompts: List[str],
+    scene_poses: List[List[str]],
 ) -> Dict[str, Any]:
-    prompt_by_segment: Dict[int, str] = {}
-    for group, prompt in zip(scene_groups, scene_prompts):
+    poses_by_segment: Dict[int, List[str]] = {}
+    for group, poses in zip(scene_groups, scene_poses):
         for idx in group:
-            prompt_by_segment[idx] = prompt
+            poses_by_segment[idx] = poses
 
     short_candidate_indices = set(scene_groups[0]) | set(scene_groups[-1])
 
@@ -217,7 +236,7 @@ def build_blueprint(
             "start": round(t, 1),
             "end": round(t + dur, 1),
             "text": text,
-            "prompt": prompt_by_segment[i],
+            "poses": poses_by_segment[i],
             "is_short_candidate": i in short_candidate_indices,
         })
         t += dur

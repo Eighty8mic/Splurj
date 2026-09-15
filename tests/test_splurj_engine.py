@@ -31,10 +31,10 @@ def _valid_blueprint(day=1):
         },
         "voiceover": {"directive": "calm, curious", "full_text": "Seg one. Seg two. Seg three. Seg four."},
         "timeline": [
-            {"start": 0, "end": 15, "text": "Seg one.", "prompt": "doodle prompt one", "is_short_candidate": True},
-            {"start": 15, "end": 30, "text": "Seg two.", "prompt": "doodle prompt two", "is_short_candidate": True},
-            {"start": 30, "end": 45, "text": "Seg three.", "prompt": "doodle prompt three", "is_short_candidate": False},
-            {"start": 45, "end": 60, "text": "Seg four.", "prompt": "doodle prompt four", "is_short_candidate": False},
+            {"start": 0, "end": 15, "text": "Seg one.", "poses": ["doodle pose one-a", "doodle pose one-b"], "is_short_candidate": True},
+            {"start": 15, "end": 30, "text": "Seg two.", "poses": ["doodle pose two-a", "doodle pose two-b"], "is_short_candidate": True},
+            {"start": 30, "end": 45, "text": "Seg three.", "poses": ["doodle pose three-a", "doodle pose three-b"], "is_short_candidate": False},
+            {"start": 45, "end": 60, "text": "Seg four.", "poses": ["doodle pose four-a", "doodle pose four-b"], "is_short_candidate": False},
         ],
     }
 
@@ -84,6 +84,34 @@ def test_validate_blueprint_rejects_oversized_metadata_description():
     bp = _valid_blueprint()
     bp["metadata"]["description"] = "x" * 1001
     with pytest.raises(SystemExit, match="metadata.description"):
+        _validate_blueprint(bp)
+
+
+def test_validate_blueprint_rejects_missing_poses_key():
+    bp = _valid_blueprint()
+    del bp["timeline"][0]["poses"]
+    with pytest.raises(SystemExit, match="poses"):
+        _validate_blueprint(bp)
+
+
+def test_validate_blueprint_rejects_non_list_poses():
+    bp = _valid_blueprint()
+    bp["timeline"][0]["poses"] = "not a list"
+    with pytest.raises(SystemExit, match="poses"):
+        _validate_blueprint(bp)
+
+
+def test_validate_blueprint_rejects_empty_poses_list():
+    bp = _valid_blueprint()
+    bp["timeline"][0]["poses"] = []
+    with pytest.raises(SystemExit, match="poses"):
+        _validate_blueprint(bp)
+
+
+def test_validate_blueprint_rejects_non_string_pose_entry():
+    bp = _valid_blueprint()
+    bp["timeline"][0]["poses"] = ["fine", 123]
+    with pytest.raises(SystemExit, match="poses"):
         _validate_blueprint(bp)
 
 
@@ -209,6 +237,9 @@ def test_run_pipeline_end_to_end_with_mocked_apis(tmp_path, fixture_image, fixtu
 
     # One thumbnail generated per variant (2), first one set as the video's default thumbnail.
     fake_uploader.set_default_thumbnail.assert_called_once()
+
+    # 4 segments x 2 poses each (per _valid_blueprint) + 2 thumbnail variants.
+    assert fake_image_gen.generate.call_count == 4 * 2 + 2
 
 
 def test_run_pipeline_skip_upload_does_not_call_youtube(tmp_path, fixture_image, fixture_audio, monkeypatch):
@@ -377,7 +408,7 @@ def test_generate_one_segment_overlays_sfx_when_cues_present(tmp_path, fixture_i
         lambda text, output_path, duration_seconds=None, max_retries=4: shutil.copy2(fixture_audio, output_path) or output_path
     )
 
-    segment = {"text": "Seg one.", "prompt": "doodle prompt", "sfx": [{"cue": "coin drop", "at": 0.2}]}
+    segment = {"text": "Seg one.", "poses": ["doodle pose a", "doodle pose b"], "sfx": [{"cue": "coin drop", "at": 0.2}]}
 
     with patch("splurj_engine.overlay_cues") as mock_overlay:
         mock_overlay.side_effect = lambda voice, cues, output_path: shutil.copy2(voice, output_path) or output_path
@@ -389,6 +420,8 @@ def test_generate_one_segment_overlays_sfx_when_cues_present(tmp_path, fixture_i
     cue_args, _ = mock_overlay.call_args
     assert cue_args[1] == [(Path(tmp_path / "sfx_00_00.mp3"), 0.2)]
     assert result["audio"].exists()
+    assert len(result["images"]) == 2
+    assert fake_image_gen.generate.call_count == 2
 
 
 def test_generate_one_segment_skips_sfx_when_no_cues(tmp_path, fixture_image, fixture_audio):
@@ -404,10 +437,12 @@ def test_generate_one_segment_skips_sfx_when_no_cues(tmp_path, fixture_image, fi
     )
 
     fake_sfx_gen = MagicMock()
-    segment = {"text": "Seg one.", "prompt": "doodle prompt"}
+    segment = {"text": "Seg one.", "poses": ["doodle pose a"]}
 
     with patch("splurj_engine.overlay_cues") as mock_overlay:
-        _generate_one_segment(0, segment, "calm", fake_audio_gen, fake_image_gen, tmp_path, None, sfx_gen=fake_sfx_gen)
+        result = _generate_one_segment(0, segment, "calm", fake_audio_gen, fake_image_gen, tmp_path, None, sfx_gen=fake_sfx_gen)
 
     fake_sfx_gen.generate.assert_not_called()
     mock_overlay.assert_not_called()
+    assert len(result["images"]) == 1
+    assert fake_image_gen.generate.call_count == 1
