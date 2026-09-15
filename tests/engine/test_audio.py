@@ -1,11 +1,16 @@
 import json
+import shutil
 import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
+
 from engine.audio import (
     LOUDNESS_TARGET_I,
+    LOUDNESS_UNDERSHOOT_TOLERANCE,
     AudioGenerator,
     measure_integrated_loudness,
     normalize_loudness,
@@ -26,6 +31,8 @@ def _make_tone_mp3(path, volume_db, duration=2.0):
     )
     assert result.returncode == 0, result.stderr
     return path
+
+
 
 
 def test_parse_directive_calm_curious_lowers_stability_variance():
@@ -103,6 +110,33 @@ def test_normalize_loudness_equalizes_segment_levels(tmp_path):
 
     assert measure_integrated_loudness(quiet) == pytest.approx(LOUDNESS_TARGET_I, abs=1.0)
     assert measure_integrated_loudness(loud) == pytest.approx(LOUDNESS_TARGET_I, abs=1.0)
+
+
+def test_normalize_loudness_falls_back_to_limiter_when_linear_undershoots(tmp_path):
+    """Regression test using a real ElevenLabs take checked in as a fixture
+    (tests/fixtures/undershoot_segment.mp3): a real render measured this
+    segment stuck at -21.76 LUFS (target -16.0) even after normalize_loudness
+    ran -- traced to linear-mode loudnorm capping its gain at the true-peak
+    ceiling on a short, transient-heavy segment (one hot consonant burst
+    against an otherwise quiet body). Neither linear nor dynamic loudnorm
+    mode can fix this (there is no exploitable dynamic range within the
+    segment for either to differentially compress), so normalize_loudness
+    must detect the undershoot and fall back to an explicit gain-up +
+    true-peak limiter.
+
+    A synthetic (sine-wave burst + tone tail) fixture was tried first, but
+    EBU R128's relative gating algorithm doesn't behave representatively on a
+    near-total-silence-plus-one-tone-blip shape (unlike real continuous
+    speech) -- the checked-in real segment is what actually reproduces the bug.
+    """
+    audio_path = tmp_path / "undershoot_segment.mp3"
+    shutil.copy2(FIXTURES_DIR / "undershoot_segment.mp3", audio_path)
+    raw_i = measure_integrated_loudness(audio_path)
+    assert raw_i < LOUDNESS_TARGET_I - LOUDNESS_UNDERSHOOT_TOLERANCE * 2  # sanity: fixture is genuinely far off
+
+    normalize_loudness(audio_path)
+
+    assert measure_integrated_loudness(audio_path) == pytest.approx(LOUDNESS_TARGET_I, abs=1.5)
 
 
 def test_normalize_loudness_leaves_silence_untouched(tmp_path):

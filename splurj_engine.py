@@ -321,7 +321,7 @@ def run_pipeline(
     assembler.concatenate_segments(seg_clips, concat_path)
 
     logger.info("Ambient audio mix…")
-    ambient_db = float(os.getenv("AMBIENT_DB", "-15"))
+    ambient_db = float(os.getenv("AMBIENT_DB", "-9"))
     ambient_track = assembler.get_ambient_track()
     if ambient_track is None:
         logger.info("No manual ambient track — composing background music…")
