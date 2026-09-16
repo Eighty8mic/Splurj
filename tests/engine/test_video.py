@@ -4,14 +4,21 @@ from unittest.mock import patch
 
 import pytest
 
-from engine.video import CAPTION_MAX_CHARS_PER_LINE, VideoAssembler, probe_video_resolution
+from engine.video import (
+    CAPTION_MAX_CHARS_PER_LINE,
+    MAX_LAPS_PER_SEGMENT,
+    MIN_POSE_CLIP_SECONDS,
+    VideoAssembler,
+    build_pose_sequence,
+    probe_video_resolution,
+)
 
 
 def test_create_segment_video_outputs_16x9_canvas(tmp_path, fixture_image, fixture_audio):
     assembler = VideoAssembler(workspace=tmp_path, assets_dir=tmp_path / "assets")
     out = tmp_path / "clip_00.mp4"
 
-    result = assembler.create_segment_video(fixture_image, fixture_audio, out, duration=1.0)
+    result = assembler.create_segment_video([fixture_image], fixture_audio, out, duration=1.0)
 
     assert result == out
     assert out.exists()
@@ -20,8 +27,8 @@ def test_create_segment_video_outputs_16x9_canvas(tmp_path, fixture_image, fixtu
 
 def test_concatenate_segments_combines_clips(tmp_path, fixture_image, fixture_audio):
     assembler = VideoAssembler(workspace=tmp_path, assets_dir=tmp_path / "assets")
-    clip_a = assembler.create_segment_video(fixture_image, fixture_audio, tmp_path / "a.mp4", 1.0)
-    clip_b = assembler.create_segment_video(fixture_image, fixture_audio, tmp_path / "b.mp4", 1.0)
+    clip_a = assembler.create_segment_video([fixture_image], fixture_audio, tmp_path / "a.mp4", 1.0)
+    clip_b = assembler.create_segment_video([fixture_image], fixture_audio, tmp_path / "b.mp4", 1.0)
 
     out = tmp_path / "concat.mp4"
     result = assembler.concatenate_segments([clip_a, clip_b], out)
@@ -43,7 +50,7 @@ def test_mix_ambient_audio_falls_back_to_copy_when_no_track(tmp_path, fixture_im
     (assets_dir / "ambient").mkdir(parents=True)
     assembler = VideoAssembler(workspace=tmp_path, assets_dir=assets_dir)
 
-    clip = assembler.create_segment_video(fixture_image, fixture_audio, tmp_path / "clip.mp4", 1.0)
+    clip = assembler.create_segment_video([fixture_image], fixture_audio, tmp_path / "clip.mp4", 1.0)
     out = tmp_path / "mixed.mp4"
     result = assembler.mix_ambient_audio(clip, out)
 
@@ -61,7 +68,7 @@ def test_mix_ambient_audio_mixes_when_track_present(tmp_path, fixture_image, fix
     shutil.copy2(fixture_audio, ambient_dir / "drone.mp3")
 
     assembler = VideoAssembler(workspace=tmp_path, assets_dir=assets_dir)
-    clip = assembler.create_segment_video(fixture_image, fixture_audio, tmp_path / "clip.mp4", 1.0)
+    clip = assembler.create_segment_video([fixture_image], fixture_audio, tmp_path / "clip.mp4", 1.0)
     out = tmp_path / "mixed.mp4"
     result = assembler.mix_ambient_audio(clip, out, ambient_db=-15.0)
 
@@ -84,7 +91,7 @@ def test_mix_ambient_audio_prefers_explicit_track_over_assets_dir(tmp_path, fixt
     shutil.copy2(fixture_audio, generated_track)
 
     assembler = VideoAssembler(workspace=tmp_path, assets_dir=assets_dir)
-    clip = assembler.create_segment_video(fixture_image, fixture_audio, tmp_path / "clip.mp4", 1.0)
+    clip = assembler.create_segment_video([fixture_image], fixture_audio, tmp_path / "clip.mp4", 1.0)
     out = tmp_path / "mixed.mp4"
 
     with patch.object(assembler, "get_ambient_track") as spy:
@@ -98,13 +105,81 @@ def test_mix_ambient_audio_prefers_explicit_track_over_assets_dir(tmp_path, fixt
 
 def test_finalize_produces_exact_16x9_canvas(tmp_path, fixture_image, fixture_audio):
     assembler = VideoAssembler(workspace=tmp_path, assets_dir=tmp_path / "assets")
-    clip = assembler.create_segment_video(fixture_image, fixture_audio, tmp_path / "clip.mp4", 1.0)
+    clip = assembler.create_segment_video([fixture_image], fixture_audio, tmp_path / "clip.mp4", 1.0)
 
     out = tmp_path / "final.mp4"
     result = assembler.finalize(clip, out)
 
     assert result == out
     assert probe_video_resolution(out) == (1920, 1080)
+
+
+# ── build_pose_sequence (pure math, no ffmpeg) ──────────────────────────────
+
+def test_build_pose_sequence_returns_boomerang_indices():
+    seq = build_pose_sequence(n_poses=3, target_duration=7.0, xfade_seconds=0.5, target_lap_seconds=7.0)
+
+    assert seq.pose_indices == [0, 1, 2]
+    assert seq.node_indices == [0, 1, 2, 1, 0]
+
+
+def test_build_pose_sequence_repeats_laps_for_longer_segments():
+    # target_duration ~= 2 laps worth (target_lap_seconds=7.0) -> k=2
+    seq = build_pose_sequence(n_poses=3, target_duration=14.0, xfade_seconds=0.5, target_lap_seconds=7.0)
+
+    assert seq.node_indices == [0, 1, 2, 1, 0, 1, 2, 1, 0]
+    assert seq.node_indices.count(seq.node_indices[0]) >= 1  # sanity: 0 appears
+
+
+@pytest.mark.parametrize("n_poses,duration", [(2, 3.0), (3, 5.0), (3, 14.0), (3, 21.0)])
+def test_build_pose_sequence_always_starts_and_ends_on_pose_zero(n_poses, duration):
+    # This is the property that makes hard cuts between independently-rendered
+    # segments in the same held scene invisible -- treat it as load-bearing.
+    seq = build_pose_sequence(n_poses=n_poses, target_duration=duration)
+
+    assert seq.node_indices[0] == 0
+    assert seq.node_indices[-1] == 0
+
+
+def test_build_pose_sequence_handles_single_pose():
+    seq = build_pose_sequence(n_poses=1, target_duration=5.0)
+
+    assert seq.pose_indices == [0]
+    assert seq.node_indices == [0]
+    assert seq.xfade_seconds == 0.0
+
+
+def test_build_pose_sequence_respects_minimum_clip_floor_on_short_segments():
+    # A very short segment (near the blueprint's 1.5s floor) can't fit even one
+    # meaningful pose transition at 3 poses -- must thin down, ultimately to the
+    # single-pose static fallback, rather than produce an imperceptibly-fast flicker.
+    seq = build_pose_sequence(n_poses=3, target_duration=1.5)
+
+    assert seq.node_indices == [0]
+    assert seq.pose_indices == [0]
+
+
+def test_build_pose_sequence_thins_pose_count_before_falling_back_to_static():
+    # A duration too short for 3 poses (clip_seconds would be 0.8s) but long
+    # enough for 2 (clip_seconds 1.0s) should thin, not jump straight to
+    # static -- proves the thinning loop tries intermediate pose counts
+    # rather than only the extremes.
+    seq = build_pose_sequence(
+        n_poses=3, target_duration=2.0,
+        xfade_seconds=0.5, target_lap_seconds=100.0,  # force laps=1
+    )
+
+    assert len(seq.pose_indices) == 2
+    assert seq.pose_indices == [0, 2]  # evenly-spaced: keeps first and last pose
+    assert seq.node_indices == [0, 1, 0]
+
+
+def test_build_pose_sequence_caps_laps_at_max_laps_per_segment():
+    # An extremely long segment must not blow up the filter graph indefinitely.
+    seq = build_pose_sequence(n_poses=3, target_duration=1000.0, xfade_seconds=0.5, target_lap_seconds=7.0)
+
+    lap_transitions = 2 * 3 - 2
+    assert (len(seq.node_indices) - 1) == MAX_LAPS_PER_SEGMENT * lap_transitions
 
 
 def test_find_candidate_runs_groups_contiguous_true_segments():
@@ -137,7 +212,7 @@ def test_extract_shorts_produces_vertical_clips_with_captions(tmp_path, fixture_
         {"text": "It changes how you'll spend this week.", "is_short_candidate": True},
     ]
     clips = [
-        assembler.create_segment_video(fixture_image, fixture_audio, tmp_path / f"clip_{i:02d}.mp4", 1.0)
+        assembler.create_segment_video([fixture_image], fixture_audio, tmp_path / f"clip_{i:02d}.mp4", 1.0)
         for i in range(len(segments))
     ]
 
@@ -172,7 +247,7 @@ def test_extract_shorts_preserves_apostrophes_and_percent_signs(tmp_path, fixtur
         {"text": caption_text, "is_short_candidate": True},
     ]
     clips = [
-        assembler.create_segment_video(fixture_image, fixture_audio, tmp_path / "clip_00.mp4", 1.0),
+        assembler.create_segment_video([fixture_image], fixture_audio, tmp_path / "clip_00.mp4", 1.0),
     ]
 
     output_dir = tmp_path / "shorts"
@@ -248,7 +323,7 @@ def test_extract_shorts_writes_wrapped_caption_textfile(tmp_path, fixture_image,
     long_text = "You tapped a small piece of plastic and your brain felt no pain at all."
     segments = [{"text": long_text, "is_short_candidate": True}]
     clips = [
-        assembler.create_segment_video(fixture_image, fixture_audio, tmp_path / "clip_00.mp4", 1.0),
+        assembler.create_segment_video([fixture_image], fixture_audio, tmp_path / "clip_00.mp4", 1.0),
     ]
 
     shorts = assembler.extract_shorts(clips, segments, tmp_path / "shorts")
@@ -273,7 +348,7 @@ def test_extract_shorts_caption_textfile_uses_lf_line_endings(tmp_path, fixture_
     long_text = "You tapped a small piece of plastic and your brain felt no pain at all."
     segments = [{"text": long_text, "is_short_candidate": True}]
     clips = [
-        assembler.create_segment_video(fixture_image, fixture_audio, tmp_path / "clip_00.mp4", 1.0),
+        assembler.create_segment_video([fixture_image], fixture_audio, tmp_path / "clip_00.mp4", 1.0),
     ]
 
     assembler.extract_shorts(clips, segments, tmp_path / "shorts")
@@ -281,3 +356,77 @@ def test_extract_shorts_caption_textfile_uses_lf_line_endings(tmp_path, fixture_
     caption_bytes = (tmp_path / "short_00_caption.txt").read_bytes()
     assert b"\n" in caption_bytes, "expected a wrapped multi-line caption"
     assert b"\r" not in caption_bytes
+
+
+# ── create_segment_video: multi-pose crossfade (real ffmpeg) ───────────────
+
+def _sample_frame_avg_color(video_path: Path, timestamp: float, tmp_path: Path) -> tuple:
+    frame_path = tmp_path / f"sample_{timestamp}.raw"
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", str(timestamp),
+        "-i", str(video_path),
+        "-frames:v", "1",
+        "-vf", "scale=8:8",
+        "-f", "rawvideo",
+        "-pix_fmt", "rgb24",
+        str(frame_path),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+    data = frame_path.read_bytes()
+    n = len(data) // 3
+    return (sum(data[0::3]) / n, sum(data[1::3]) / n, sum(data[2::3]) / n)
+
+
+def test_create_segment_video_with_single_pose_falls_back_to_static_zoom(tmp_path, fixture_image, fixture_audio):
+    """A 1-element pose list must render exactly like the old static-zoompan
+    path -- no xfade machinery involved."""
+    assembler = VideoAssembler(workspace=tmp_path, assets_dir=tmp_path / "assets")
+    out = tmp_path / "clip_static.mp4"
+
+    result = assembler.create_segment_video([fixture_image], fixture_audio, out, duration=1.0)
+
+    assert result == out
+    assert out.exists()
+    assert probe_video_resolution(out) == (1920, 1080)
+
+
+def test_create_segment_video_crossfades_through_distinct_poses(tmp_path, fixture_images, fixture_audio):
+    assembler = VideoAssembler(workspace=tmp_path, assets_dir=tmp_path / "assets")
+    out = tmp_path / "clip_multi.mp4"
+
+    # Long enough that build_pose_sequence won't need to thin the pose count.
+    result = assembler.create_segment_video(fixture_images, fixture_audio, out, duration=6.0)
+
+    assert result == out
+    assert out.exists()
+    assert probe_video_resolution(out) == (1920, 1080)
+
+    # The boomerang sequence deliberately starts AND ends on pose 0 (blue) --
+    # that's what makes segment-boundary hard-cuts invisible -- so sample the
+    # middle of the clip (where the sequence reaches pose 2, green) against
+    # the start, not the very end (which is blue again by design).
+    start_color = _sample_frame_avg_color(out, 0.3, tmp_path)
+    middle_color = _sample_frame_avg_color(out, 3.0, tmp_path)
+
+    # fixture_images are blue, red, green -- clearly distinct dominant channels,
+    # so two different points in the clip must show measurably different
+    # average color if the crossfade is actually cycling through the poses
+    # rather than just holding one image (or silently ignoring the extras).
+    color_diff = sum(abs(a - b) for a, b in zip(start_color, middle_color))
+    assert color_diff > 30, (
+        f"Expected visibly different frame colors across the clip (start={start_color}, "
+        f"middle={middle_color}) -- crossfade may not be cycling through distinct poses."
+    )
+
+
+def test_create_segment_video_with_multiple_poses_matches_requested_duration(tmp_path, fixture_images, fixture_audio):
+    assembler = VideoAssembler(workspace=tmp_path, assets_dir=tmp_path / "assets")
+    out = tmp_path / "clip_duration.mp4"
+
+    assembler.create_segment_video(fixture_images, fixture_audio, out, duration=6.0)
+
+    from engine.video import probe_duration
+    assert probe_duration(out) == pytest.approx(6.0, abs=0.2)

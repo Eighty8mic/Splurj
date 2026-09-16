@@ -14,37 +14,61 @@
     {
       "start": 0, "end": 15,
       "text": "This morning, you tapped a small piece of plastic against a machine.",
-      "prompt": "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, a stick figure with a big circular head and dot eyes tapping a credit card against a card reader on a plain white counter, neutral expression, background is flat white, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+      "poses": [
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, a stick figure with a big circular head and dot eyes reaching a credit card toward a card reader on a plain white counter, neutral expression, card still an inch from the reader, background is flat white, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same stick figure with a big circular head and dot eyes touching the credit card flat against the card reader, a small BEEP burst drawn above the reader, neutral expression, background is flat white, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same stick figure with a big circular head and dot eyes pulling the credit card back from the reader, small motion lines behind the card, neutral expression, background is flat white, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style."
+      ],
       "is_short_candidate": true
     },
     {
       "start": 15, "end": 30,
       "text": "Money left your account. You felt nothing at all.",
-      "prompt": "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same stick figure standing calmly with a thought bubble showing a small dollar bill with a face flying away, flat white background, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+      "poses": [
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same stick figure standing calmly with a small empty thought bubble just starting to form above its head, flat white background, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same stick figure standing calmly with a thought bubble showing a small dollar bill with a face flying away, flat white background, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same stick figure standing calmly, the thought bubble now empty and fading with light dotted outline only, flat white background, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style."
+      ],
       "is_short_candidate": true
     },
     {
       "start": 30, "end": 45,
       "text": "Economists call that missing flicker the pain of paying.",
-      "prompt": "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, a large brain with dollar-sign eyes centered on a solid blue background with bold ALL CAPS yellow text reading PAIN OF PAYING above it, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+      "poses": [
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, a large brain with dollar-sign eyes centered on a solid blue background, eyes wide open and steady, no text yet, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same large brain with dollar-sign eyes centered on a solid blue background, eyes mid-blink with short flicker lines around them, bold ALL CAPS yellow text reading PAIN OF PAYING above it, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same large brain with dollar-sign eyes centered on a solid blue background, eyes wide open again with a small '?' beside it, bold ALL CAPS yellow text reading PAIN OF PAYING above it, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style."
+      ],
       "is_short_candidate": false
     },
     {
       "start": 45, "end": 60,
       "text": "Your brain evolved to feel a small sting every time you spend.",
-      "prompt": "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, a caveman-styled simple stick figure handing over coins with a wincing expression, tan background suggesting history, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+      "poses": [
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, a caveman-styled simple stick figure holding out a handful of coins toward another hand, neutral expression, tan background suggesting history, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same caveman-styled simple stick figure handing over the coins with a wincing expression, small jagged 'sting' lines near its chest, tan background suggesting history, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same caveman-styled simple stick figure with empty hands and a settling neutral expression, coins now gone, tan background suggesting history, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style."
+      ],
       "is_short_candidate": false
     },
     {
       "start": 60, "end": 75,
       "text": "A tap removes that sting on purpose, not by accident.",
-      "prompt": "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, a credit card drawn with a sly grinning face next to a card reader, red ALL CAPS text reading BY DESIGN above it, flat orange background, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+      "poses": [
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, a credit card drawn with a plain neutral face next to a card reader, flat orange background, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same credit card now drawn with a sly grinning face next to the card reader, red ALL CAPS text reading BY DESIGN above it, flat orange background, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same grinning credit card with the card reader now showing a small green BEEP burst, red ALL CAPS text reading BY DESIGN above it, flat orange background, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style."
+      ],
       "is_short_candidate": true
     },
     {
       "start": 75, "end": 90,
       "text": "That silence at checkout is proof the system worked exactly as intended.",
-      "prompt": "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same original stick figure walking away calmly from the counter, flat white background, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+      "poses": [
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same original stick figure standing at the counter starting to turn away, calm expression, flat white background, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same original stick figure mid-stride walking away from the counter, small motion lines behind its feet, calm expression, flat white background, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style.",
+        "Hand-drawn 2D doodle cartoon animation, flat colors, bold black outlines, slightly imperfect sketchy marker lines, the same original stick figure now farther from the counter near the edge of frame, calm expression, flat white background, no gradients, no shadows, no textures, no photorealism, no 3D, 16:9 aspect ratio, educational YouTube explainer doodle style."
+      ],
       "is_short_candidate": true
     }
   ]
