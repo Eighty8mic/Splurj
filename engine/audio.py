@@ -10,6 +10,7 @@ import re
 import subprocess
 import time
 from pathlib import Path
+from typing import List, NamedTuple, Optional
 
 from elevenlabs import ElevenLabs
 from elevenlabs.types import VoiceSettings
@@ -126,6 +127,11 @@ def parse_directive(directive: str) -> VoiceSettings:
     )
 
 
+class GeneratedSegment(NamedTuple):
+    path: Path
+    request_id: str
+
+
 class AudioGenerator:
     def __init__(self, api_key: str, voice_id: str, model: str = "eleven_turbo_v2"):
         if not voice_id:
@@ -139,8 +145,13 @@ class AudioGenerator:
         self.model = model
 
     def generate_segment(
-        self, text: str, output_path: Path, directive: str = "", max_retries: int = 4
-    ) -> Path:
+        self,
+        text: str,
+        output_path: Path,
+        directive: str = "",
+        max_retries: int = 4,
+        previous_request_ids: Optional[List[str]] = None,
+    ) -> GeneratedSegment:
         if not text.strip():
             raise ValueError("Cannot generate audio from empty text")
 
@@ -148,19 +159,28 @@ class AudioGenerator:
         logger.info("Generating audio -- %d chars -> %s", len(text), output_path.name)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
+        convert_kwargs = dict(
+            text=text,
+            voice_id=self.voice_id,
+            model_id=self.model,
+            voice_settings=voice_settings,
+            output_format="mp3_44100_128",
+        )
+        # Omit entirely rather than pass an empty/None list -- the SDK's own
+        # default is OMIT, and the first segment in a script has no prior
+        # request to stitch from.
+        if previous_request_ids:
+            convert_kwargs["previous_request_ids"] = previous_request_ids
+
+        request_id = ""
         for attempt in range(1, max_retries + 1):
             try:
-                audio_iter = self.client.text_to_speech.convert(
-                    text=text,
-                    voice_id=self.voice_id,
-                    model_id=self.model,
-                    voice_settings=voice_settings,
-                    output_format="mp3_44100_128",
-                )
-                with open(output_path, "wb") as fh:
-                    for chunk in audio_iter:
-                        if chunk:
-                            fh.write(chunk)
+                with self.client.text_to_speech.with_raw_response.convert(**convert_kwargs) as response:
+                    request_id = response.headers.get("request-id", "")
+                    with open(output_path, "wb") as fh:
+                        for chunk in response.data:
+                            if chunk:
+                                fh.write(chunk)
                 break
 
             except Exception as exc:
@@ -181,7 +201,7 @@ class AudioGenerator:
 
         normalize_loudness(output_path)
         logger.info("Audio saved: %s (%.1f KB)", output_path.name, output_path.stat().st_size / 1024)
-        return output_path
+        return GeneratedSegment(path=output_path, request_id=request_id)
 
     def probe_duration(self, audio_path: Path) -> float:
         cmd = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", str(audio_path)]

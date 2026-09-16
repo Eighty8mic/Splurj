@@ -2,6 +2,7 @@ import shutil
 import sys
 from unittest.mock import MagicMock, patch
 
+from engine.audio import GeneratedSegment
 from engine.video import probe_video_resolution
 from splurj_engine import load_blueprint, main
 
@@ -18,7 +19,8 @@ def _patch_dirs(monkeypatch, tmp_path):
 def _patch_generators(fixture_image, fixture_audio):
     fake_audio_gen = MagicMock()
     fake_audio_gen.generate_segment.side_effect = (
-        lambda text, output_path, directive="", max_retries=4: shutil.copy2(fixture_audio, output_path) or output_path
+        lambda text, output_path, directive="", max_retries=4, previous_request_ids=None:
+            GeneratedSegment(path=shutil.copy2(fixture_audio, output_path) or output_path, request_id="fake-request-id")
     )
     fake_audio_gen.probe_duration.side_effect = lambda audio_path: 1.0
 

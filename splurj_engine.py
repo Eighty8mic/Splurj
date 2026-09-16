@@ -32,6 +32,10 @@ from engine.youtube import YouTubeUploader
 # ambient track (-stream_loop -1) to cover the full video length.
 MUSIC_BED_LENGTH_MS = 60_000
 
+# ElevenLabs "request stitching" limit: a generation can only be conditioned
+# on up to 3 preceding request IDs.
+MAX_PREVIOUS_REQUEST_IDS = 3
+
 BASE_DIR = Path(__file__).parent
 WORKSPACE = BASE_DIR / "workspace"
 OUTPUT_DIR = BASE_DIR / "output"
@@ -211,21 +215,13 @@ def build_thumbnail_prompts(title: str) -> List[str]:
 
 # ── Asset generation ─────────────────────────────────────────────────────────
 
-def _generate_one_segment(idx, segment, directive, audio_gen, image_gen, workspace, reference_image_path, sfx_gen=None):
+def _generate_one_segment_audio(idx, segment, directive, audio_gen, workspace, sfx_gen=None, previous_request_ids=None):
     audio_path = workspace / f"audio_{idx:02d}.mp3"
 
-    audio_gen.generate_segment(segment["text"], audio_path, directive=directive)
+    generated = audio_gen.generate_segment(
+        segment["text"], audio_path, directive=directive, previous_request_ids=previous_request_ids,
+    )
     duration = audio_gen.probe_duration(audio_path)
-
-    # Sequential, not a nested thread pool: the outer ThreadPoolExecutor across
-    # segments already saturates Gemini's rate limit (images.py's own
-    # retry/backoff assumes that ceiling) -- nesting a second pool here would
-    # multiply concurrent calls by len(poses) and risk 429 storms.
-    images = []
-    for p, pose_prompt in enumerate(segment["poses"]):
-        image_path = workspace / f"image_{idx:02d}_{p:02d}.png"
-        image_gen.generate(pose_prompt, image_path, reference_image_path=reference_image_path)
-        images.append(image_path)
 
     sfx_cues = segment.get("sfx")
     if sfx_cues:
@@ -238,36 +234,75 @@ def _generate_one_segment(idx, segment, directive, audio_gen, image_gen, workspa
         overlay_cues(audio_path, cue_clips, mixed_path)
         os.replace(mixed_path, audio_path)
 
-    return {
-        "index": idx,
-        "audio": audio_path,
-        "images": images,
-        "duration": duration,
-        "text": segment["text"],
-    }
+    result = {"index": idx, "audio": audio_path, "duration": duration, "text": segment["text"]}
+    return result, generated.request_id
 
 
-def generate_all_assets(blueprint, audio_gen, image_gen, workspace, reference_image_path, sfx_gen=None, max_workers=3):
-    timeline = blueprint["timeline"]
-    directive = blueprint["voiceover"].get("directive", "")
+def _generate_all_audio(timeline, directive, audio_gen, workspace, sfx_gen=None):
+    """Sequential -- each segment's TTS call is conditioned on the request IDs
+    of the immediately preceding segments (ElevenLabs "request stitching"),
+    which measurably improves cross-segment prosody continuity for a script
+    split into many separate calls. This requires each prior request to have
+    completed before the next is issued, so audio can't share the image
+    generation thread pool below."""
+    results = []
+    recent_request_ids: List[str] = []
+
+    for idx, segment in enumerate(timeline):
+        result, request_id = _generate_one_segment_audio(
+            idx, segment, directive, audio_gen, workspace, sfx_gen,
+            previous_request_ids=recent_request_ids,
+        )
+        results.append(result)
+        recent_request_ids = (recent_request_ids + [request_id])[-MAX_PREVIOUS_REQUEST_IDS:]
+        logger.info("  [audio %d/%d] Segment %d complete", idx + 1, len(timeline), idx + 1)
+
+    return results
+
+
+def _generate_one_segment_images(idx, segment, image_gen, workspace, reference_image_path):
+    # Sequential, not a nested thread pool: the outer ThreadPoolExecutor across
+    # segments already saturates Gemini's rate limit (images.py's own
+    # retry/backoff assumes that ceiling) -- nesting a second pool here would
+    # multiply concurrent calls by len(poses) and risk 429 storms.
+    images = []
+    for p, pose_prompt in enumerate(segment["poses"]):
+        image_path = workspace / f"image_{idx:02d}_{p:02d}.png"
+        image_gen.generate(pose_prompt, image_path, reference_image_path=reference_image_path)
+        images.append(image_path)
+    return images
+
+
+def _generate_all_images(timeline, image_gen, workspace, reference_image_path, max_workers=3):
     results = {}
-
-    logger.info("Generating assets for %d segments (max %d workers)…", len(timeline), max_workers)
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
-            pool.submit(_generate_one_segment, i, seg, directive, audio_gen, image_gen, workspace, reference_image_path, sfx_gen): i
+            pool.submit(_generate_one_segment_images, i, seg, image_gen, workspace, reference_image_path): i
             for i, seg in enumerate(timeline)
         }
         for future in as_completed(futures):
             idx = futures[future]
             try:
                 results[idx] = future.result()
-                logger.info("  [%d/%d] Segment %d complete", len(results), len(timeline), idx + 1)
+                logger.info("  [images %d/%d] Segment %d complete", len(results), len(timeline), idx + 1)
             except Exception as exc:
-                logger.error("Segment %d failed: %s", idx, exc)
+                logger.error("Segment %d image generation failed: %s", idx, exc)
                 raise
 
     return [results[i] for i in sorted(results.keys())]
+
+
+def generate_all_assets(blueprint, audio_gen, image_gen, workspace, reference_image_path, sfx_gen=None, max_workers=3):
+    timeline = blueprint["timeline"]
+    directive = blueprint["voiceover"].get("directive", "")
+
+    logger.info("Generating audio for %d segments (sequential, for cross-segment prosody continuity)…", len(timeline))
+    audio_results = _generate_all_audio(timeline, directive, audio_gen, workspace, sfx_gen)
+
+    logger.info("Generating images for %d segments (max %d workers)…", len(timeline), max_workers)
+    image_results = _generate_all_images(timeline, image_gen, workspace, reference_image_path, max_workers)
+
+    return [{**audio_results[i], "images": image_results[i]} for i in range(len(timeline))]
 
 
 # ── Pipeline ─────────────────────────────────────────────────────────────────

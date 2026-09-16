@@ -28,6 +28,18 @@ def _make_tone_mp3(path, volume_db, duration=2.0):
     return path
 
 
+def _fake_raw_response(chunks, request_id="fake-request-id"):
+    """A context-manager mock matching client.text_to_speech.with_raw_response
+    .convert()'s shape: `with ... as response: response.headers, response.data`."""
+    response = MagicMock()
+    response.headers = {"request-id": request_id}
+    response.data = chunks
+    cm = MagicMock()
+    cm.__enter__.return_value = response
+    cm.__exit__.return_value = False
+    return cm
+
+
 def test_parse_directive_calm_curious_lowers_stability_variance():
     settings = parse_directive("Calm, curious, a little conspiratorial. Unhurried.")
     assert settings.stability == 0.70
@@ -54,7 +66,7 @@ def test_generate_segment_rejects_empty_text(tmp_path):
 
 def test_generate_segment_writes_audio_bytes(tmp_path):
     fake_client = MagicMock()
-    fake_client.text_to_speech.convert.return_value = [b"x" * 200]
+    fake_client.text_to_speech.with_raw_response.convert.return_value = _fake_raw_response([b"x" * 200])
 
     with patch("engine.audio.ElevenLabs", return_value=fake_client), \
          patch("engine.audio.normalize_loudness", side_effect=lambda p, **kw: p):
@@ -62,15 +74,63 @@ def test_generate_segment_writes_audio_bytes(tmp_path):
         out = tmp_path / "audio_00.mp3"
         result = gen.generate_segment("Hello there.", out, directive="calm")
 
-    assert result == out
+    assert result.path == out
     assert out.read_bytes() == b"x" * 200
+
+
+def test_generate_segment_returns_request_id_from_response_header(tmp_path):
+    fake_client = MagicMock()
+    fake_client.text_to_speech.with_raw_response.convert.return_value = _fake_raw_response(
+        [b"x" * 200], request_id="req-abc-123",
+    )
+
+    with patch("engine.audio.ElevenLabs", return_value=fake_client), \
+         patch("engine.audio.normalize_loudness", side_effect=lambda p, **kw: p):
+        gen = AudioGenerator(api_key="key", voice_id="abc123")
+        result = gen.generate_segment("Hello there.", tmp_path / "audio_00.mp3")
+
+    assert result.request_id == "req-abc-123"
+
+
+def test_generate_segment_passes_previous_request_ids_to_api(tmp_path):
+    """ElevenLabs 'request stitching': conditioning a segment's generation on
+    the request IDs of the segments immediately before it measurably improves
+    cross-segment prosody continuity for a script split into many calls."""
+    fake_client = MagicMock()
+    fake_client.text_to_speech.with_raw_response.convert.return_value = _fake_raw_response([b"x" * 200])
+
+    with patch("engine.audio.ElevenLabs", return_value=fake_client), \
+         patch("engine.audio.normalize_loudness", side_effect=lambda p, **kw: p):
+        gen = AudioGenerator(api_key="key", voice_id="abc123")
+        gen.generate_segment(
+            "Hello there.", tmp_path / "audio_01.mp3", previous_request_ids=["req-000"],
+        )
+
+    _, call_kwargs = fake_client.text_to_speech.with_raw_response.convert.call_args
+    assert call_kwargs["previous_request_ids"] == ["req-000"]
+
+
+def test_generate_segment_omits_previous_request_ids_when_none_given(tmp_path):
+    """The first segment in a script has no prior segment to stitch from --
+    the API kwarg must be omitted entirely (not sent as an empty list or
+    null), matching the SDK's own OMIT-by-default semantics."""
+    fake_client = MagicMock()
+    fake_client.text_to_speech.with_raw_response.convert.return_value = _fake_raw_response([b"x" * 200])
+
+    with patch("engine.audio.ElevenLabs", return_value=fake_client), \
+         patch("engine.audio.normalize_loudness", side_effect=lambda p, **kw: p):
+        gen = AudioGenerator(api_key="key", voice_id="abc123")
+        gen.generate_segment("Hello there.", tmp_path / "audio_00.mp3")
+
+    _, call_kwargs = fake_client.text_to_speech.with_raw_response.convert.call_args
+    assert "previous_request_ids" not in call_kwargs
 
 
 def test_generate_segment_retries_on_network_error_then_succeeds(tmp_path):
     fake_client = MagicMock()
-    fake_client.text_to_speech.convert.side_effect = [
+    fake_client.text_to_speech.with_raw_response.convert.side_effect = [
         ConnectionError("getaddrinfo failed"),
-        [b"x" * 200],
+        _fake_raw_response([b"x" * 200]),
     ]
 
     with patch("engine.audio.ElevenLabs", return_value=fake_client), \
@@ -80,7 +140,7 @@ def test_generate_segment_retries_on_network_error_then_succeeds(tmp_path):
         out = tmp_path / "audio_00.mp3"
         result = gen.generate_segment("Hello there.", out)
 
-    assert result == out
+    assert result.path == out
     assert out.read_bytes() == b"x" * 200
     mock_sleep.assert_called_once()
 
@@ -128,13 +188,13 @@ def test_generate_segment_normalizes_generated_audio(tmp_path):
     downstream consumer (main video, Shorts) gets consistent levels."""
     tone_bytes = _make_tone_mp3(tmp_path / "api_response.mp3", volume_db=-12).read_bytes()
     fake_client = MagicMock()
-    fake_client.text_to_speech.convert.return_value = [tone_bytes]
+    fake_client.text_to_speech.with_raw_response.convert.return_value = _fake_raw_response([tone_bytes])
 
     with patch("engine.audio.ElevenLabs", return_value=fake_client):
         gen = AudioGenerator(api_key="key", voice_id="abc123")
-        out = gen.generate_segment("Hello there.", tmp_path / "audio_00.mp3")
+        result = gen.generate_segment("Hello there.", tmp_path / "audio_00.mp3")
 
-    assert measure_integrated_loudness(out) == pytest.approx(LOUDNESS_TARGET_I, abs=1.0)
+    assert measure_integrated_loudness(result.path) == pytest.approx(LOUDNESS_TARGET_I, abs=1.0)
 
 
 def test_probe_duration_parses_ffprobe_json(tmp_path):
