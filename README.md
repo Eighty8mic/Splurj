@@ -71,7 +71,7 @@ All variables live in `.env` (see `.env.example` for the template).
 | `YOUTUBE_CLIENT_SECRET` | yes | — | Path to your Google Cloud OAuth client JSON |
 | `YOUTUBE_PRIVACY` | no | `private` | Upload visibility: `private`, `unlisted`, or `public` |
 | `YOUTUBE_CATEGORY_ID` | no | `27` (Education) | YouTube category |
-| `AMBIENT_DB` | no | `-15` | Background music level relative to voice, in dB. Quiet by design — raise it (e.g. `-9`) if the music is too subtle to notice |
+| `AMBIENT_DB` | no | `-9` | Background music level relative to voice, in dB. Lower it (e.g. `-15`) for a more subtle bed, or raise it if the music still feels buried under narration |
 | `SHORT_MIN_SEGMENTS` / `SHORT_MAX_SEGMENTS` | no | `3` / `4` | Segment-count bounds for auto-cut Shorts |
 | `NOTIFY_SMTP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `NOTIFY_EMAIL_TO` | no | — | Optional email alert when the nightly run finds a dead YouTube token. A desktop toast fires either way, no config needed for that |
 
