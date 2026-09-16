@@ -1,0 +1,8 @@
+# Normalize line endings for text files so git stops warning about LF->CRLF
+# conversion on every commit on Windows checkouts.
+* text=auto eol=lf
+
+*.png binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary
