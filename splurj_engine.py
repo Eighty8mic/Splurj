@@ -81,9 +81,13 @@ def _validate_blueprint(data: Dict[str, Any], source: str = "") -> None:
         raise SystemExit(f"timeline{label} must be a non-empty list of segment objects")
 
     for i, seg in enumerate(data["timeline"]):
-        for key in ("start", "end", "text", "prompt", "is_short_candidate"):
+        for key in ("start", "end", "text", "poses", "is_short_candidate"):
             if key not in seg:
                 raise SystemExit(f"timeline[{i}]{label} is missing '{key}'")
+
+        poses = seg["poses"]
+        if not isinstance(poses, list) or not poses or not all(isinstance(p, str) for p in poses):
+            raise SystemExit(f"timeline[{i}].poses{label} must be a non-empty list of strings")
 
         if "sfx" in seg:
             if not isinstance(seg["sfx"], list):
@@ -209,11 +213,19 @@ def build_thumbnail_prompts(title: str) -> List[str]:
 
 def _generate_one_segment(idx, segment, directive, audio_gen, image_gen, workspace, reference_image_path, sfx_gen=None):
     audio_path = workspace / f"audio_{idx:02d}.mp3"
-    image_path = workspace / f"image_{idx:02d}.png"
 
     audio_gen.generate_segment(segment["text"], audio_path, directive=directive)
     duration = audio_gen.probe_duration(audio_path)
-    image_gen.generate(segment["prompt"], image_path, reference_image_path=reference_image_path)
+
+    # Sequential, not a nested thread pool: the outer ThreadPoolExecutor across
+    # segments already saturates Gemini's rate limit (images.py's own
+    # retry/backoff assumes that ceiling) -- nesting a second pool here would
+    # multiply concurrent calls by len(poses) and risk 429 storms.
+    images = []
+    for p, pose_prompt in enumerate(segment["poses"]):
+        image_path = workspace / f"image_{idx:02d}_{p:02d}.png"
+        image_gen.generate(pose_prompt, image_path, reference_image_path=reference_image_path)
+        images.append(image_path)
 
     sfx_cues = segment.get("sfx")
     if sfx_cues:
@@ -229,7 +241,7 @@ def _generate_one_segment(idx, segment, directive, audio_gen, image_gen, workspa
     return {
         "index": idx,
         "audio": audio_path,
-        "image": image_path,
+        "images": images,
         "duration": duration,
         "text": segment["text"],
     }
@@ -313,7 +325,7 @@ def run_pipeline(
     seg_clips: List[Path] = []
     for seg in segments:
         clip_path = run_ws / f"clip_{seg['index']:02d}.mp4"
-        assembler.create_segment_video(seg["image"], seg["audio"], clip_path, seg["duration"])
+        assembler.create_segment_video(seg["images"], seg["audio"], clip_path, seg["duration"])
         seg_clips.append(clip_path)
 
     logger.info("Concatenating %d clips…", len(seg_clips))

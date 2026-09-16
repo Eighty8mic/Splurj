@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from engine.drafting import (
+    POSES_PER_SCENE,
     STYLE_ANCHOR,
     STYLE_LOCK,
     GeminiImagePromptDrafter,
@@ -68,11 +69,11 @@ def test_check_citation_safety_is_case_insensitive():
 def test_build_blueprint_full_text_matches_segment_concatenation():
     segments = ["First segment.", "Second segment.", "Third segment."]
     scene_groups = [[0, 1], [2]]
-    scene_prompts = ["prompt A", "prompt B"]
+    scene_poses = [["pose A1", "pose A2"], ["pose B1", "pose B2"]]
 
     blueprint = build_blueprint(
         day=5, title="Title", description="Desc", tags=["splurj"], directive="calm",
-        segments=segments, scene_groups=scene_groups, scene_prompts=scene_prompts,
+        segments=segments, scene_groups=scene_groups, scene_poses=scene_poses,
     )
 
     assert blueprint["voiceover"]["full_text"] == " ".join(s["text"] for s in blueprint["timeline"])
@@ -82,36 +83,36 @@ def test_build_blueprint_full_text_matches_segment_concatenation():
 def test_build_blueprint_marks_first_and_last_scene_as_short_candidates():
     segments = ["A.", "B.", "C.", "D.", "E."]
     scene_groups = [[0, 1], [2], [3, 4]]
-    scene_prompts = ["p1", "p2", "p3"]
+    scene_poses = [["p1"], ["p2"], ["p3"]]
 
     blueprint = build_blueprint(
         day=1, title="T", description="D", tags=["x"], directive="calm",
-        segments=segments, scene_groups=scene_groups, scene_prompts=scene_prompts,
+        segments=segments, scene_groups=scene_groups, scene_poses=scene_poses,
     )
 
     flags = [seg["is_short_candidate"] for seg in blueprint["timeline"]]
     assert flags == [True, True, False, True, True]
 
 
-def test_build_blueprint_applies_scene_prompt_to_every_segment_in_the_scene():
+def test_build_blueprint_applies_scene_poses_to_every_segment_in_the_scene():
     segments = ["A.", "B.", "C."]
     scene_groups = [[0, 1], [2]]
-    scene_prompts = ["shared prompt", "solo prompt"]
+    scene_poses = [["shared pose 1", "shared pose 2"], ["solo pose"]]
 
     blueprint = build_blueprint(
         day=1, title="T", description="D", tags=["x"], directive="calm",
-        segments=segments, scene_groups=scene_groups, scene_prompts=scene_prompts,
+        segments=segments, scene_groups=scene_groups, scene_poses=scene_poses,
     )
 
-    assert blueprint["timeline"][0]["prompt"] == "shared prompt"
-    assert blueprint["timeline"][1]["prompt"] == "shared prompt"
-    assert blueprint["timeline"][2]["prompt"] == "solo prompt"
+    assert blueprint["timeline"][0]["poses"] == ["shared pose 1", "shared pose 2"]
+    assert blueprint["timeline"][1]["poses"] == ["shared pose 1", "shared pose 2"]
+    assert blueprint["timeline"][2]["poses"] == ["solo pose"]
 
 
 def test_build_blueprint_truncates_oversized_description():
     blueprint = build_blueprint(
         day=1, title="T", description="x" * 2000, tags=["x"], directive="calm",
-        segments=["A."], scene_groups=[[0]], scene_prompts=["p"],
+        segments=["A."], scene_groups=[[0]], scene_poses=[["p"]],
     )
     assert len(blueprint["metadata"]["description"]) <= 900
 
@@ -179,22 +180,47 @@ def test_script_drafter_raises_on_malformed_json():
 def test_image_prompt_drafter_enforces_style_anchor_and_lock():
     with patch("google.genai.Client") as mock_client_cls:
         mock_client_cls.return_value.models.generate_content.return_value = _fake_json_response(
-            {"scene_prompts": ["a stick figure holding a wallet"]}
+            {"scene_poses": [["a stick figure holding a wallet", "a stick figure waving the wallet", "a stick figure pocketing the wallet"]]}
         )
         drafter = GeminiImagePromptDrafter(api_key="key")
-        result = drafter.draft_scene_prompts(["You tapped a card."])
+        result = drafter.draft_scene_poses(["You tapped a card."])
 
-    assert result[0].startswith(STYLE_ANCHOR)
-    assert result[0].endswith("doodle style.")
+    assert result[0][0].startswith(STYLE_ANCHOR)
+    assert result[0][0].endswith("doodle style.")
 
 
 def test_image_prompt_drafter_leaves_already_styled_prompts_unchanged():
     already_styled = STYLE_ANCHOR + "a stick figure" + STYLE_LOCK
     with patch("google.genai.Client") as mock_client_cls:
         mock_client_cls.return_value.models.generate_content.return_value = _fake_json_response(
-            {"scene_prompts": [already_styled]}
+            {"scene_poses": [[already_styled, already_styled, already_styled]]}
         )
         drafter = GeminiImagePromptDrafter(api_key="key")
-        result = drafter.draft_scene_prompts(["text"])
+        result = drafter.draft_scene_poses(["text"])
 
-    assert result[0] == already_styled
+    assert result[0][0] == already_styled
+
+
+def test_image_prompt_drafter_returns_poses_per_scene_per_beat():
+    with patch("google.genai.Client") as mock_client_cls:
+        mock_client_cls.return_value.models.generate_content.return_value = _fake_json_response(
+            {"scene_poses": [
+                ["pose 1a", "pose 1b", "pose 1c"],
+                ["pose 2a", "pose 2b", "pose 2c"],
+            ]}
+        )
+        drafter = GeminiImagePromptDrafter(api_key="key")
+        result = drafter.draft_scene_poses(["beat one", "beat two"], poses_per_scene=3)
+
+    assert len(result) == 2
+    assert all(len(poses) == 3 for poses in result)
+
+
+def test_image_prompt_drafter_raises_on_pose_count_mismatch():
+    with patch("google.genai.Client") as mock_client_cls:
+        mock_client_cls.return_value.models.generate_content.return_value = _fake_json_response(
+            {"scene_poses": [["only one pose"]]}  # requested 3, got 1
+        )
+        drafter = GeminiImagePromptDrafter(api_key="key")
+        with pytest.raises(ValueError, match="pose"):
+            drafter.draft_scene_poses(["beat one"], poses_per_scene=3)

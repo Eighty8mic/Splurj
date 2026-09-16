@@ -87,7 +87,7 @@ def draft_blueprint(day: int, gemini_api_key: str) -> Dict[str, Any]:
         scene_groups = group_into_scenes(segments)
         scene_texts = [" ".join(segments[i] for i in group) for group in scene_groups]
         try:
-            scene_prompts = image_drafter.draft_scene_prompts(scene_texts)
+            scene_poses = image_drafter.draft_scene_poses(scene_texts)
         except ValueError as exc:
             logger.warning("Image prompt draft malformed (attempt %d): %s", attempt, exc)
             last_violations = [f"malformed response: {exc}"]
@@ -96,7 +96,7 @@ def draft_blueprint(day: int, gemini_api_key: str) -> Dict[str, Any]:
         blueprint = build_blueprint(
             day=day, title=draft["title"], description=draft["description"], tags=draft["tags"],
             directive=draft["directive"], segments=segments, scene_groups=scene_groups,
-            scene_prompts=scene_prompts,
+            scene_poses=scene_poses,
         )
         _validate_blueprint(blueprint, source="drafted blueprint")
 
